@@ -1,4 +1,4 @@
-# lazycoder
+<h1><img src="assets/logo.png" alt="" height="40" valign="middle">&nbsp;lazycoder</h1>
 
 A code review agent with senior-level judgement. It interrogates every changed
 block against a fixed rubric, runs the real checks, and returns a defensible
