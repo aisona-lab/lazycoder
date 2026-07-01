@@ -1,0 +1,38 @@
+{
+  "name": "review_working_loop",
+  "principle": "The agent proposes, the system verifies, the human decides.",
+  "steps": [
+    {
+      "id": "1_specify",
+      "action": "Load the target diff, the harness, guardrails, and review_rules. Define exactly what 'reviewed' means for this run.",
+      "output": "a scoped review task"
+    },
+    {
+      "id": "2_plan",
+      "action": "Produce a plan: which files and blocks to review, in what order, and which subagents to spawn.",
+      "gate": "require human OK if scope exceeds guardrails.limits (a bad plan approved is a bad review)"
+    },
+    {
+      "id": "3_execute",
+      "action": "For each block, run the review rubric via subagents. Collect findings, each with rule_id, location, severity, and reason.",
+      "note": "small bounded units; never review the whole repo in one opaque pass"
+    },
+    {
+      "id": "4_verify",
+      "action": "Run linters, the type checker, and the test suite in the sandbox. Attach the REAL tool output.",
+      "gate": "never trust self-reported 'all green'; the verdict must be backed by actual runs"
+    },
+    {
+      "id": "5_decide",
+      "action": "Aggregate findings into a verdict: APPROVE / REQUEST_CHANGES / BLOCK. A human confirms on consequential changes.",
+      "gate": "human_in_the_loop"
+    }
+  ],
+  "error_handling": {
+    "on_tool_failure": "retry once, then report the failure; never fabricate a result",
+    "on_uncertainty": "lower confidence and escalate to human rather than guess",
+    "on_guardrail_trigger": "halt the run and report"
+  },
+  "stop_conditions": ["verdict produced", "max_steps reached", "unrecoverable error", "guardrail triggered"],
+  "outputs": ["review_report.json", "one append-only decision_log entry"]
+}

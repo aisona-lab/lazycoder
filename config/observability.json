@@ -1,0 +1,18 @@
+{
+  "description": "ADDED BY MENTOR. Reliability is the engineer's job, not the model's. Every run must be traceable and auditable, or you cannot debug a bad review or defend a good one.",
+  "decision_log": {
+    "storage": "append-only (SQLite dev / Postgres prod); never edited or deleted",
+    "record_per_run": ["run_id", "target_diff", "plan", "each_step", "findings_with_rule_ids", "tool_outputs", "final_verdict", "human_decision", "timestamps"]
+  },
+  "tracing": {
+    "trace_each_subagent_step": true,
+    "capture_real_tool_output": true,
+    "no_self_reported_success": true
+  },
+  "logging": {
+    "format": "structured JSON",
+    "levels": ["INFO", "WARN", "ERROR"],
+    "redact": ["API_KEY", "SECRET", "TOKEN", "PASSWORD", "PRIVATE_KEY"]
+  },
+  "metrics": ["reviews_per_run", "findings_by_severity", "eval_precision", "eval_recall", "tokens_used", "human_override_rate"]
+}

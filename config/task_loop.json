@@ -1,0 +1,66 @@
+{
+  "name": "subagent_task_loop",
+  "orchestrator": {
+    "role": "Lead reviewer. Decomposes the diff into independent review tasks, spawns subagents with isolated context, verifies between steps, aggregates results, resolves conflicts, and produces the final verdict.",
+    "never": "acts as a subagent itself or trusts a subagent's claim without its cited evidence"
+  },
+  "subagents": [
+    {
+      "role": "code_reviewer",
+      "applies_rule_ids": [
+        "R1",
+        "R2",
+        "R3",
+        "R4",
+        "R5",
+        "R6",
+        "R8",
+        "R13",
+        "R15"
+      ],
+      "context": "only the assigned file/block plus its direct dependencies"
+    },
+    {
+      "role": "security_reviewer",
+      "applies_rule_ids": [
+        "R7"
+      ],
+      "context": "assigned block plus a short threat model (inputs, trust boundaries)"
+    },
+    {
+      "role": "architecture_reviewer",
+      "applies_rule_ids": [
+        "R9",
+        "R10",
+        "R11",
+        "R12",
+        "R16",
+        "R17"
+      ],
+      "context": "module boundaries and data flow, not line-level detail"
+    },
+    {
+      "role": "test_reviewer",
+      "applies_rule_ids": [
+        "R4",
+        "R7",
+        "R14"
+      ],
+      "focus": "Are there tests? Do they cover the edge and failure modes the reviewers flagged? Do they actually run?",
+      "context": "assigned block plus its tests"
+    }
+  ],
+  "rules": {
+    "isolated_context_per_subagent": true,
+    "no_shared_mutable_state": true,
+    "each_finding_must_cite_rule_id_and_location": true,
+    "orchestrator_verifies_between_steps": true,
+    "conflicting_findings_resolved_by_orchestrator": true,
+    "subagent_tools_are_least_privilege": true
+  },
+  "aggregation": {
+    "verdict_policy": "Severity-driven: BLOCK if any finding is high severity; REQUEST_CHANGES if any finding is medium or low severity; APPROVE only if there are no findings.",
+    "dedupe_findings": true,
+    "order_findings_by": "severity desc, then file, then line"
+  }
+}

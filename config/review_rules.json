@@ -1,0 +1,172 @@
+{
+  "description": "The interrogation rubric the review agent applies to AI-generated code. Every finding must cite a rule id and a code location. A block passes only when each applicable rule has a satisfactory answer.",
+  "verdicts": ["APPROVE", "REQUEST_CHANGES", "BLOCK"],
+  "severity_levels": ["low", "medium", "high"],
+  "categories": {
+    "code_level": "Line and block-level decisions.",
+    "correctness": "Does it actually do the right thing?",
+    "security": "Trust boundaries and safety.",
+    "simplicity": "Is it as simple as it can be?",
+    "maintainability": "Can another human read and keep it alive?",
+    "tests": "Is it proven to work and stay working?",
+    "compatibility": "Does it avoid breaking what already exists?",
+    "system_level": "Architecture and state."
+  },
+  "rules": [
+    {
+      "id": "R1",
+      "category": "code_level",
+      "question": "Why this data structure?",
+      "checks": "Is the chosen structure right for the access pattern (e.g. dict/set for O(1) lookup vs list for order)? What is the cost of the operations used?",
+      "good_answer": "The structure fits the dominant operation and the trade-off is justified.",
+      "flag_when": "A list is scanned repeatedly where a dict/set would be O(1), or a heavy structure is used for a trivial need.",
+      "severity_if_unjustified": "low"
+    },
+    {
+      "id": "R2",
+      "category": "code_level",
+      "question": "Why this control flow? Is the order load-bearing?",
+      "checks": "Could it be simpler? Does the sequence of steps carry meaning that a refactor could break?",
+      "good_answer": "Flow is as simple as the logic allows and any load-bearing order is intentional and documented.",
+      "flag_when": "Needless nesting, or an order dependency that is implicit and fragile.",
+      "severity_if_unjustified": "low"
+    },
+    {
+      "id": "R3",
+      "category": "code_level",
+      "question": "What are the inputs and outputs?",
+      "checks": "Are the types, ranges, and contracts of every input and output explicit and validated at the boundary?",
+      "good_answer": "Clear typed contracts; boundaries validate what enters.",
+      "flag_when": "Unclear or unvalidated inputs, or an output contract that callers must guess.",
+      "severity_if_unjustified": "medium"
+    },
+    {
+      "id": "R4",
+      "category": "code_level",
+      "question": "What are the failure modes, handled or not?",
+      "checks": "For each step, what input breaks it (empty, null, huge, wrong type, concurrent, network down)? Is each handled?",
+      "good_answer": "Failure modes are enumerated and handled or explicitly accepted.",
+      "flag_when": "An unhandled failure mode exists on a real input (this is where bugs live).",
+      "severity_if_unjustified": "high"
+    },
+    {
+      "id": "R5",
+      "category": "code_level",
+      "question": "What are the side effects?",
+      "checks": "Does it write, mutate state, hit the network, or touch the filesystem? Are those effects intended and contained?",
+      "good_answer": "Side effects are explicit, minimal, and contained; pure where possible.",
+      "flag_when": "Hidden mutation or an unexpected write/network call.",
+      "severity_if_unjustified": "medium"
+    },
+    {
+      "id": "R6",
+      "category": "code_level",
+      "question": "Why this dependency? Justified, or could the standard library do it?",
+      "checks": "Is the dependency necessary, maintained, and worth the debt, or is it reinventing/over-importing what stdlib covers?",
+      "good_answer": "Dependency is justified and adds real value the stdlib does not.",
+      "flag_when": "A dependency added for something trivial, unmaintained, or heavy.",
+      "severity_if_unjustified": "low"
+    },
+    {
+      "id": "R7",
+      "category": "security",
+      "question": "Is it secure? Validated input, secrets exposed, injection possible?",
+      "checks": "Is external input validated? Are secrets kept out of code and logs? Any SQL/command/prompt injection surface?",
+      "good_answer": "Inputs validated, no secrets in code/logs, no injection surface.",
+      "flag_when": "Unvalidated input, a secret in code/logs, or any injection vector.",
+      "severity_if_unjustified": "high"
+    },
+    {
+      "id": "R8",
+      "category": "simplicity",
+      "question": "Can this be one line? If not, as simple and short as possible?",
+      "checks": "Is there dead code, redundant branches, or verbosity that a clearer, shorter form would remove without hurting readability?",
+      "good_answer": "As simple as the problem allows; not clever for its own sake.",
+      "flag_when": "Verbose or redundant code that a simpler form replaces cleanly.",
+      "severity_if_unjustified": "low",
+      "note": "Simpler, not merely shorter. Never sacrifice clarity or a failure check just to save a line."
+    },
+    {
+      "id": "R9",
+      "category": "system_level",
+      "question": "Where does state live?",
+      "checks": "Is state explicit and in one place, or hidden and scattered? Is there a single source of truth?",
+      "good_answer": "State is explicit with a clear owner and single source of truth.",
+      "flag_when": "Hidden or duplicated state that two parts could disagree on.",
+      "severity_if_unjustified": "medium"
+    },
+    {
+      "id": "R10",
+      "category": "system_level",
+      "question": "Sync vs async / queue?",
+      "checks": "Is slow, spiky, or crash-sensitive work done inline where a queue/async would be safer? Or async added where sync would be simpler?",
+      "good_answer": "The concurrency model matches the work.",
+      "flag_when": "Slow/durable work done inline, or needless async complexity.",
+      "severity_if_unjustified": "medium"
+    },
+    {
+      "id": "R11",
+      "category": "system_level",
+      "question": "Monolith vs services?",
+      "checks": "Is a boundary being split prematurely, or a real boundary being ignored?",
+      "good_answer": "The boundary matches a real, justified need.",
+      "flag_when": "Premature service split for a small team, or a god-module ignoring a real boundary.",
+      "severity_if_unjustified": "low"
+    },
+    {
+      "id": "R12",
+      "category": "system_level",
+      "question": "What is the invariant?",
+      "checks": "What must ALWAYS be true here, and is it enforced by design rather than a hopeful check?",
+      "good_answer": "The invariant is named and made structurally hard to violate.",
+      "flag_when": "A critical invariant is only hoped for, or not identified at all.",
+      "severity_if_unjustified": "high"
+    },
+    {
+      "id": "R13",
+      "category": "correctness",
+      "question": "Does it actually do what it is supposed to do?",
+      "checks": "Does the logic satisfy the stated requirement across normal, boundary, and off-by-one cases? Trace it against the intended behavior, not only the happy path.",
+      "good_answer": "The logic meets the requirement on normal and boundary inputs.",
+      "flag_when": "Clean, safe code that solves the wrong problem or misses a boundary case.",
+      "severity_if_unjustified": "high",
+      "note": "The biggest gap in most rubrics: they check HOW code is written, not WHETHER it is correct."
+    },
+    {
+      "id": "R14",
+      "category": "tests",
+      "question": "Is it tested, and do the tests cover the failure and edge modes?",
+      "checks": "Do tests exist, run green, and exercise the empty/null/large/malicious and boundary cases the reviewers flagged, not just the happy path?",
+      "good_answer": "Tests exist, run, and cover the risky paths (especially the R4 failure modes).",
+      "flag_when": "No tests, or tests that only cover the happy path while flagged failure modes go untested.",
+      "severity_if_unjustified": "high"
+    },
+    {
+      "id": "R15",
+      "category": "maintainability",
+      "question": "Can another human read and maintain this?",
+      "checks": "Clear names, obvious intent, no cleverness that hides meaning. Distinct from R8: short can still be unreadable.",
+      "good_answer": "A new engineer understands it without having to ask.",
+      "flag_when": "Cryptic names, dense one-liners, or hidden intent that will cost the next reader.",
+      "severity_if_unjustified": "low"
+    },
+    {
+      "id": "R16",
+      "category": "compatibility",
+      "question": "Does this break anything that already exists?",
+      "checks": "Does it change a public API, a data contract, or a behavior that other code or callers depend on? Are dependents updated, or is the change backward-compatible?",
+      "good_answer": "No external contract is broken, or all dependents are updated and covered by tests.",
+      "flag_when": "A signature, contract, or behavior changes and existing callers are not accounted for.",
+      "severity_if_unjustified": "high"
+    },
+    {
+      "id": "R17",
+      "category": "system_level",
+      "question": "Are there concurrency or race conditions?",
+      "checks": "If state is shared or work is async/parallel, can two paths interleave to corrupt state or double-act? Is access synchronized or made idempotent?",
+      "good_answer": "Shared state is synchronized, or operations are idempotent and safe to interleave.",
+      "flag_when": "Shared mutable state accessed concurrently without synchronization, or a check-then-act race.",
+      "severity_if_unjustified": "high"
+    }
+  ]
+}

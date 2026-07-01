@@ -1,0 +1,20 @@
+{
+  "description": "Test plan / manifest for the project. Actual test code comes next; this defines what must be covered.",
+  "unit": [
+    { "id": "T1", "target": "config loading", "assert": "every config JSON loads and validates against its pydantic schema; malformed config fails loudly" },
+    { "id": "T2", "target": "secret redaction", "assert": "redact_patterns remove secrets from any log line and from anything sent to the model" },
+    { "id": "T3", "target": "review rule application", "assert": "each rule R1..R12 fires on a known-bad snippet and stays silent on a clean one" },
+    { "id": "T4", "target": "verdict aggregation", "assert": "one high-severity finding yields BLOCK; one medium yields REQUEST_CHANGES; none yields APPROVE" }
+  ],
+  "integration": [
+    { "id": "T5", "target": "guardrails", "assert": "any forbidden_without_human_approval action is refused without approval" },
+    { "id": "T6", "target": "subagent isolation", "assert": "subagents receive only their scoped context and share no mutable state" },
+    { "id": "T7", "target": "sandbox", "assert": "reviewed code cannot make a network call or write outside the temp dir" },
+    { "id": "T8", "target": "verify step", "assert": "the verdict is backed by REAL tool output; a faked 'green' cannot pass" }
+  ],
+  "evals": [
+    { "id": "T9", "target": "review quality", "assert": "run config/evals.json; report precision and recall; fail CI if below threshold" }
+  ],
+  "run": "pytest -q",
+  "ci": "run unit + integration + evals on every push; block merge on failure"
+}

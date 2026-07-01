@@ -1,0 +1,29 @@
+{
+  "runtime": { "python": ">=3.12" },
+  "dependencies": {
+    "required": ["anthropic", "pydantic", "ruff", "black", "mypy", "pytest"],
+    "rationale": {
+      "anthropic": "LLM access",
+      "pydantic": "validate config files and structured LLM output (never trust raw output)",
+      "ruff+black+mypy": "static analysis the reviewer itself runs against the target",
+      "pytest": "tests and evals"
+    }
+  },
+  "env_vars": {
+    "ANTHROPIC_API_KEY": "required; read from environment; never committed",
+    "LOG_LEVEL": "optional; default INFO"
+  },
+  "files_to_create": [
+    ".gitignore  (ignore .env, logs/, __pycache__, .venv)",
+    ".env.example  (no real secrets)",
+    "pyproject.toml  (dependencies + tool config)",
+    ".pre-commit-config.yaml  (ruff, black, mypy)"
+  ],
+  "bootstrap_steps": [
+    "git init; add .gitignore and README",
+    "copy .env.example to .env and set ANTHROPIC_API_KEY",
+    "uv sync",
+    "pre-commit install",
+    "pytest -q  (must pass on the skeleton before writing features)"
+  ]
+}

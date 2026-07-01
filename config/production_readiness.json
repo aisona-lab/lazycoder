@@ -1,0 +1,12 @@
+{
+  "description": "The gate a change must pass before it is considered production-ready. The review agent checks these and the human confirms.",
+  "checklist": [
+    { "id": "P1", "area": "quality", "item": "Types pass, lint clean, formatter applied, pre-commit green", "pass_when": "all static checks pass in CI, not just locally" },
+    { "id": "P2", "area": "tests", "item": "Tests exist on the critical paths and actually run green", "pass_when": "the suite runs in the sandbox and covers the flagged edge/failure modes" },
+    { "id": "P3", "area": "security", "item": "Secrets in env/vault, input validated, authn/authz where needed, dependencies scanned", "pass_when": "no secret in code/logs, no unvalidated external input, no known-vulnerable dependency" },
+    { "id": "P4", "area": "data", "item": "Migrations versioned, backups with a TESTED restore, idempotency where retries can happen", "pass_when": "restore was actually tested; repeated operations are safe" },
+    { "id": "P5", "area": "observability", "item": "Structured logging, metrics, alerts, tracing of each agent step", "pass_when": "a failure can be diagnosed from logs/traces alone" },
+    { "id": "P6", "area": "delivery", "item": "CI/CD pipeline, reproducible infra, rollback under a minute", "pass_when": "a bad deploy can be reverted quickly and reproducibly" }
+  ],
+  "release_policy": "BLOCK release if any P3 (security) or P2 (tests) item fails; REQUEST_CHANGES for others."
+}
