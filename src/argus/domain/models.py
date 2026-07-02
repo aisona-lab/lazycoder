@@ -67,7 +67,8 @@ class ReviewReport(_StrictModel):
         findings = [r.finding for r in rule_results if r.finding is not None]
         return cls(findings=findings, rule_results=rule_results)
 
-    @computed_field
+    @computed_field  # type: ignore[prop-decorator]
+    @property
     def verdict(self) -> Verdict:
         from argus.domain.aggregator import aggregate
 
