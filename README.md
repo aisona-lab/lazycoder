@@ -27,17 +27,21 @@ staying consistent across 200 files, and proving the checks actually ran.
 
 ## Status
 
-The **deterministic domain layer is complete and closed**: a code block plus a
-set of rules produces a full `ReviewReport` with an aggregated verdict, no model
-required. The LLM is the last piece to plug in, so any failure isolates to the
-prompt/model rather than the core logic.
+The **entire deterministic pipeline is built and closed** — everything except the
+LLM call itself. A real unified diff flows all the way to an aggregated verdict
+with no model in the loop:
 
 ```
-review(block, rule)            → RuleResult          # one rule
-review_all(block, rules)       → ReviewReport         # many rules
-review_rubric(block, rubric)   → ReviewReport         # the whole config rubric
-  └─ RuleResult[] → from_rule_results → aggregate → verdict
+diff → parse_diff → CodeBlock[]
+         └─ review_rubric(block, rubric)  # every rule, every block
+              └─ RuleResult[] → from_rule_results → aggregate → verdict
 ```
+
+Because the model is the *last* thing plugged in, any future failure isolates to
+the prompt or the model — never to the plumbing, which is already proven. The
+response parser is hardened against real LLM output (code fences, surrounding
+prose, severity casing) using recorded fixtures, so wiring the real client is a
+trivial swap rather than a rewrite.
 
 ## Config-driven policy
 
@@ -68,13 +72,39 @@ injection (R7). Simplicity: simplest form (R8). System-level: state (R9), sync v
 async (R10), monolith vs services (R11), invariant (R12). Plus maintainability,
 tests, and compatibility rules through R17.
 
-## Design principles
+## Design decisions — the *why*
 
-- **Understanding over vibe coding** — the product is codified interrogation.
-- **The agentic loop** — propose (findings) → verify (real tools) → decide (human).
-- **Context engineering** — policy lives in `config/`, not in scattered constants.
-- **Guardrails** — read-only by default; reviewed code is untrusted data.
-- **The eval is the product** — `config/evals.json` measures the reviewer itself.
+The interesting part of this project is not the review logic; it's the choices
+that make the review logic trustworthy.
+
+- **Deterministic core, model last.** Everything that can be pure logic *is* pure
+  logic, and the non-deterministic LLM is bolted on at the very end. This is a
+  deliberate failure-isolation strategy: when a review goes wrong, the bug is in
+  the prompt or the model, because the plumbing has tests proving it isn't there.
+
+- **Contracts make invalid state unrepresentable.** The domain types are strict
+  pydantic models with validators, not bags of fields. A *passed* rule cannot
+  carry a finding; a *failed* one must. Every finding must cite its `rule_id` and
+  an exact `file:line`. The verdict is a *computed* field over findings, never a
+  value someone can set by hand. You cannot construct a lying `ReviewReport`.
+
+- **Normalize at the boundary, keep the core strict.** Untrusted LLM text is
+  cleaned up where it enters (`"HIGH"` → `"high"`), but the domain enum stays the
+  single source of truth and never loosens. Leniency lives at the edge; the core
+  does not bend.
+
+- **Debt is executable, not documented.** The one known parser limitation is
+  pinned by a `strict` xfail test, not a comment someone can ignore. The day the
+  fix lands, that test flips to green and the suite *tells you* the debt is
+  closed. Notes rot; tests don't.
+
+- **TDD throughout.** Every behavior went RED before GREEN — including the
+  garbage-input fixtures that hardened the parser.
+
+- **The eval is the product.** `config/evals.json` is a set of known-flawed and
+  known-clean cases whose job is to measure *the reviewer itself*. Wired as a CI
+  gate, it closes the loop: a code reviewer that has its own reviewer, and knows
+  whether it's still good every time it changes.
 
 ## Develop
 
@@ -89,6 +119,15 @@ mypy src
 
 ## Roadmap
 
-1. Multi-file / diff orchestration on top of `review_rubric`.
-2. Wire the real Anthropic client in place of the fake used in tests.
-3. Run `config/evals.json` in CI as the reviewer's own regression gate.
+1. ~~Multi-file / diff orchestration on top of `review_rubric`.~~ ✓
+2. ~~Harden the response parser against real LLM output (fixtures).~~ ✓
+3. **Wire `config/evals.json` as a CI regression gate — while still on the fake
+   client.** Order matters. On the fake, the evals prove *the logic*: parser,
+   aggregator, verdict policy. This is the last deterministic gate.
+4. **Then** wire the real Anthropic client (trivial swap — the parser already
+   absorbs its output). Now those same evals stop measuring the plumbing and
+   start measuring the truth that matters: does the real model, with this prompt,
+   actually catch the SQL injection in eval E3 — or miss it? That is where the
+   project stops being *tested plumbing* and becomes *a reviewer that works, or
+   doesn't* — and thanks to the isolation above, a failing eval points straight
+   at the prompt or the model, never at the code underneath.
