@@ -13,6 +13,15 @@ class LLMReviewerParseError(Exception):
     """Raised when a reviewer response is invalid or does not match the schema."""
 
 
+def _normalize_severity(payload: dict[str, object]) -> None:
+    """Lowercase severity at the parse boundary so the domain enum stays strict."""
+    finding = payload.get("finding")
+    if isinstance(finding, dict):
+        severity = finding.get("severity")
+        if isinstance(severity, str):
+            finding["severity"] = severity.strip().lower()
+
+
 class _ReviewerResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -70,14 +79,31 @@ class SingleRuleReviewer:
         )
 
     def _parse_response(self, raw_response: str) -> _ReviewerResponse:
-        try:
-            payload = json.loads(raw_response)
-        except json.JSONDecodeError as exc:
-            msg = f"Invalid reviewer response: invalid JSON at line {exc.lineno}"
-            raise LLMReviewerParseError(msg) from exc
-
+        payload = self._extract_json_object(raw_response)
+        _normalize_severity(payload)
         try:
             return _ReviewerResponse.model_validate(payload)
         except ValidationError as exc:
             msg = f"Invalid reviewer response: {exc}"
             raise LLMReviewerParseError(msg) from exc
+
+    @staticmethod
+    def _extract_json_object(raw_response: str) -> dict[str, object]:
+        # Slice from the first '{' to the last '}' so code fences (```json)
+        # and surrounding prose are dropped in one move.
+        # ponytail: naive brace slice; over-captures if prose after the object
+        # also contains a '}'. Switch to a bracket-matching scan if that shows up.
+        start = raw_response.find("{")
+        end = raw_response.rfind("}")
+        if start == -1 or end < start:
+            msg = "Invalid reviewer response: no JSON object found"
+            raise LLMReviewerParseError(msg)
+        try:
+            payload = json.loads(raw_response[start : end + 1])
+        except json.JSONDecodeError as exc:
+            msg = f"Invalid reviewer response: invalid JSON at line {exc.lineno}"
+            raise LLMReviewerParseError(msg) from exc
+        if not isinstance(payload, dict):
+            msg = "Invalid reviewer response: expected a JSON object"
+            raise LLMReviewerParseError(msg)
+        return payload

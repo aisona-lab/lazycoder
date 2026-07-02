@@ -59,6 +59,71 @@ def test_single_rule_reviewer_rejects_invalid_llm_response_cleanly() -> None:
         )
 
 
+def _fail_finding_json(severity: str = "high") -> str:
+    return (
+        '{"passed": false, "finding": {'
+        '"rule_id": "R4",'
+        '"location": {"file": "sample.py", "line": 2},'
+        f'"severity": "{severity}",'
+        '"reason": "empty input raises ZeroDivisionError"}}'
+    )
+
+
+def _review_r4(raw_response: str):
+    config = load_all_configs()
+    rule = next(rule for rule in config.review_rules.rules if rule.id == RuleId.R4)
+    reviewer = SingleRuleReviewer(client=FakeLLMClient(responses=[raw_response]))
+    return reviewer.review(code_block="def average(xs): ...", rule=rule)
+
+
+def test_parser_accepts_json_wrapped_in_code_fences() -> None:
+    raw = f"```json\n{_fail_finding_json()}\n```"
+
+    result = _review_r4(raw)
+
+    assert result.passed is False
+    assert result.finding is not None
+    assert result.finding.severity == Severity.HIGH
+
+
+def test_parser_accepts_prose_around_the_json_object() -> None:
+    raw = f"Here is my review:\n{_fail_finding_json()}\nHope that helps!"
+
+    result = _review_r4(raw)
+
+    assert result.passed is False
+    assert result.finding is not None
+    assert result.finding.rule_id == RuleId.R4
+
+
+def test_parser_normalizes_severity_casing() -> None:
+    result = _review_r4(_fail_finding_json(severity="HIGH"))
+
+    assert result.finding is not None
+    assert result.finding.severity == Severity.HIGH
+
+
+def test_parser_rejects_response_with_no_json_object() -> None:
+    with pytest.raises(LLMReviewerParseError, match="Invalid reviewer response"):
+        _review_r4("I cannot review this code.")
+
+
+@pytest.mark.xfail(
+    strict=True,
+    reason="naive first-{-to-last-} slice over-captures a '}' in trailing prose; "
+    "close with a balanced-bracket scan in _extract_json_object",
+)
+def test_parser_handles_json_followed_by_prose_with_a_brace() -> None:
+    # Documents the known ceiling: object, then prose containing a brace.
+    # xfail flips to green the day the balanced scan lands — a living debt marker.
+    raw = f"{_fail_finding_json()} Note: consider the {{edge}} case."
+
+    result = _review_r4(raw)
+
+    assert result.finding is not None
+    assert result.finding.severity == Severity.HIGH
+
+
 def test_review_all_aggregates_rule_results_into_report() -> None:
     config = load_all_configs()
     rules = [r for r in config.review_rules.rules if r.id in (RuleId.R4, RuleId.R5)][:2]
