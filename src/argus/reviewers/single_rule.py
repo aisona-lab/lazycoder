@@ -51,9 +51,7 @@ class SingleRuleReviewer:
         results = [self.review(code_block, rule) for rule in rules]
         return ReviewReport.from_rule_results(results)
 
-    def review_rubric(
-        self, code_block: str, rubric: ReviewRulesConfig
-    ) -> ReviewReport:
+    def review_rubric(self, code_block: str, rubric: ReviewRulesConfig) -> ReviewReport:
         """Evaluate one block against every rule in the configured rubric."""
         return self.review_all(code_block, rubric.rules)
 
