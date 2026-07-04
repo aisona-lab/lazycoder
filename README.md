@@ -8,6 +8,20 @@ Code gets written fast. The bottleneck is trusting it. lazycoder is the reviewer
 that never gets tired, never skips a rule, and never self-reports green without
 running the checks.
 
+## Install
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+
+uvx lazycoder my.diff              # zero-install run
+pipx install lazycoder             # or install the CLI permanently
+
+git diff main | uvx lazycoder -    # review your branch straight from a pipe
+```
+
+Exit codes map the verdict — `0` APPROVE, `1` REQUEST_CHANGES, `2` BLOCK — so it
+drops into CI as a gate with no glue code. `--json` emits the full report.
+
 ## Manual review vs lazycoder
 
 | | Manual review | lazycoder |
@@ -170,6 +184,8 @@ pytest -m integration
 5. **Run the full evals.json set against the live model** and track the score
    over time — the eval stops measuring the plumbing and starts measuring the
    reviewer: does this prompt, on this model, still catch what it must?
-6. **Distribution:** package for PyPI with a `lazycoder` console entry point, so
-   users install with `uvx lazycoder` / `pipx install lazycoder` and review a
-   diff with one command. A GitHub Action wrapping the same CLI comes after.
+6. ~~Distribution: published to [PyPI](https://pypi.org/project/lazycoder/) with
+   a `lazycoder` console entry point (`uvx lazycoder my.diff`), rubric bundled
+   in the wheel, releases via trusted publishing on `v*` tags.~~ ✓
+7. **GitHub Action** wrapping the CLI, so `uses: aisona-lab/lazycoder` gates a
+   PR with the same rubric and exit codes.
