@@ -65,15 +65,32 @@ class SingleRuleReviewer:
         return self.review_all(code_block, rubric.rules)
 
     def _build_prompt(self, code_block: str, rule: ReviewRule) -> str:
+        rule_id = rule.id.value
         return (
             "You are reviewing one code block against one rule.\n"
-            f"Rule ID: {rule.id.value}\n"
+            f"Rule ID: {rule_id}\n"
             f"Question: {rule.question}\n"
             f"Checks: {rule.checks}\n"
             f"Flag when: {rule.flag_when}\n"
             f"Expected severity if unjustified: {rule.severity_if_unjustified.value}\n"
-            "Return strict JSON with keys: passed (bool), finding (object|null).\n"
-            "If finding is present it must match the Finding schema.\n"
+            "Respond with a single JSON object and nothing else"
+            " - no prose, no code fences.\n"
+            "Fields:\n"
+            "- passed (bool): true if the rule is satisfied,"
+            " false if it is violated.\n"
+            "- finding (object|null): null when passed is true;"
+            " required when passed is false, with fields:\n"
+            f'  - rule_id (string): must be exactly "{rule_id}".\n'
+            "  - location (object): file (string, non-empty),"
+            " line (int, 1-based), optional end_line (int >= line).\n"
+            '  - severity (string): one of "low", "medium", "high".\n'
+            "  - reason (string, non-empty): why the code violates the rule.\n"
+            "Example output when the rule passes:\n"
+            '{"passed": true, "finding": null}\n'
+            "Example output when the rule is violated:\n"
+            f'{{"passed": false, "finding": {{"rule_id": "{rule_id}",'
+            ' "location": {"file": "diff.py", "line": 3}, "severity": "high",'
+            ' "reason": "unvalidated input reaches the query"}}\n'
             "Code block:\n"
             f"{code_block}\n"
         )
