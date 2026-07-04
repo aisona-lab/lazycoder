@@ -25,11 +25,36 @@ lazycoder does not replace the human — a person still confirms consequential
 decisions. It removes the parts humans are bad at: remembering all 17 rules,
 staying consistent across 200 files, and proving the checks actually ran.
 
+Two structural facts, at a glance. These are not benchmarks — they are
+properties enforced by the schema, so they hold on every single review:
+
+```mermaid
+xychart-beta
+    title "Rubric rules guaranteed evaluated per code block"
+    x-axis ["manual review", "lazycoder"]
+    y-axis "rules (of 17)" 0 --> 17
+    bar [0, 17]
+```
+
+Manual review *may* cover all 17 — nothing guarantees it. lazycoder cannot emit
+a verdict until every rule has a recorded pass/fail (`APPROVE` is refused
+otherwise).
+
+```mermaid
+xychart-beta
+    title "Findings that cite rule_id + exact file:line (%)"
+    x-axis ["manual review", "lazycoder"]
+    y-axis "% enforced" 0 --> 100
+    bar [0, 100]
+```
+
+A human reviewer *can* cite evidence; the lazycoder domain model makes an
+uncited finding unrepresentable — pydantic rejects it before it exists.
+
 ## Status
 
-The **entire deterministic pipeline is built and closed** — everything except the
-LLM call itself. A real unified diff flows all the way to an aggregated verdict
-with no model in the loop:
+The **full pipeline is live end to end** — deterministic core plus the real
+model. A unified diff flows all the way to an aggregated verdict:
 
 ```
 diff → parse_diff → CodeBlock[]
@@ -37,11 +62,19 @@ diff → parse_diff → CodeBlock[]
               └─ RuleResult[] → from_rule_results → aggregate → verdict
 ```
 
-Because the model is the *last* thing plugged in, any future failure isolates to
-the prompt or the model — never to the plumbing, which is already proven. The
+The same flow runs in two modes, sharing every line of plumbing:
+
+- **Fake client** (default, CI): deterministic, network-free. `pytest -q` proves
+  the parser, aggregator, and verdict policy on every run.
+- **Real client** (opt-in): `AnthropicClient` hits the live API. The first live
+  run of eval E3 already passed — the model caught the SQL injection, flagged
+  R7, and the pipeline derived `BLOCK` with zero parse failures.
+
+Because the model was the *last* thing plugged in, any failure isolates to the
+prompt or the model — never to the plumbing, which is already proven. The
 response parser is hardened against real LLM output (code fences, surrounding
-prose, severity casing) using recorded fixtures, so wiring the real client is a
-trivial swap rather than a rewrite.
+prose, severity casing), and the reviewer prompt teaches the model the exact
+`Finding` schema with a literal example, so form errors die at the source.
 
 ## Config-driven policy
 
@@ -112,22 +145,31 @@ that make the review logic trustworthy.
 uv sync --extra dev
 pre-commit install
 
-pytest -q
+pytest -q                       # deterministic suite — no network, no key
 ruff check . && black --check .
 mypy src
+```
+
+To run the live-API suite (opt-in, never part of `pytest -q`):
+
+```bash
+cp .env.example .env            # fill in ANTHROPIC_API_KEY — .env is gitignored
+set -a; source .env; set +a
+pytest -m integration
 ```
 
 ## Roadmap
 
 1. ~~Multi-file / diff orchestration on top of `review_rubric`.~~ ✓
 2. ~~Harden the response parser against real LLM output (fixtures).~~ ✓
-3. **Wire `config/evals.json` as a CI regression gate — while still on the fake
-   client.** Order matters. On the fake, the evals prove *the logic*: parser,
-   aggregator, verdict policy. This is the last deterministic gate.
-4. **Then** wire the real Anthropic client (trivial swap — the parser already
-   absorbs its output). Now those same evals stop measuring the plumbing and
-   start measuring the truth that matters: does the real model, with this prompt,
-   actually catch the SQL injection in eval E3 — or miss it? That is where the
-   project stops being *tested plumbing* and becomes *a reviewer that works, or
-   doesn't* — and thanks to the isolation above, a failing eval points straight
-   at the prompt or the model, never at the code underneath.
+3. ~~Wire `config/evals.json` as a regression gate on the fake client — a missed
+   rule fails the gate.~~ ✓
+4. ~~Wire the real Anthropic client behind the same `LLMClient` protocol, with an
+   opt-in integration suite (`pytest -m integration`). First live run: the model
+   caught eval E3's SQL injection (R7 → BLOCK).~~ ✓
+5. **Run the full evals.json set against the live model** and track the score
+   over time — the eval stops measuring the plumbing and starts measuring the
+   reviewer: does this prompt, on this model, still catch what it must?
+6. **Distribution:** package for PyPI with a `lazycoder` console entry point, so
+   users install with `uvx lazycoder` / `pipx install lazycoder` and review a
+   diff with one command. A GitHub Action wrapping the same CLI comes after.
