@@ -1,13 +1,20 @@
 [project]
-name = "engineer-review-agent"
+name = "lazycoder"
 version = "0.1.0"
-description = "AI engineer agent that reviews AI-generated code (Argus)"
+description = "Code review agent with senior-level judgement: interrogates every diff hunk against a fixed rubric and returns APPROVE / REQUEST_CHANGES / BLOCK"
 readme = "README.md"
+license = "MIT"
 requires-python = ">=3.12"
 dependencies = [
     "anthropic>=0.40",
     "pydantic>=2.10",
 ]
+
+[project.urls]
+Repository = "https://github.com/aisona-lab/lazycoder"
+
+[project.scripts]
+lazycoder = "argus.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -24,6 +31,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/argus"]
+
+[tool.hatch.build.targets.wheel.force-include]
+"config" = "argus/config_defaults"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
