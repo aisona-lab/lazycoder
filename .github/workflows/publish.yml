@@ -1,0 +1,22 @@
+name: publish
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  pypi:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write # OIDC for PyPI trusted publishing
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      - name: Gate — deterministic suite must be green
+        run: |
+          uv sync --extra dev
+          uv run pytest -q
+          uv run ruff check .
+          uv run mypy src
+      - run: uv build
+      - run: uv publish --trusted-publishing always
