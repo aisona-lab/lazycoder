@@ -1,12 +1,12 @@
 <h1><img src="assets/logo.png" alt="" height="40" valign="middle">&nbsp;lazycoder</h1>
 
 A code review agent with senior-level judgement. It interrogates every changed
-block against a fixed rubric, runs the real checks, and returns a defensible
-verdict — **APPROVE / REQUEST_CHANGES / BLOCK** — before code is trusted or merged.
+block against a fixed rubric and returns a defensible verdict —
+**APPROVE / REQUEST_CHANGES / BLOCK** — before code is trusted or merged.
 
 Code gets written fast. The bottleneck is trusting it. lazycoder is the reviewer
-that never gets tired, never skips a rule, and never self-reports green without
-running the checks.
+that never gets tired, never skips a rule, and refuses to say APPROVE unless
+every rule has a recorded pass/fail.
 
 ## Install
 
@@ -22,6 +22,44 @@ git diff main | uvx lazycoder -    # review your branch straight from a pipe
 Exit codes map the verdict — `0` APPROVE, `1` REQUEST_CHANGES, `2` BLOCK — so it
 drops into CI as a gate with no glue code. `--json` emits the full report.
 
+## GitHub Action
+
+Gate every PR with the same rubric — one step, no glue code:
+
+```yaml
+name: review
+on: pull_request
+permissions:
+  contents: read
+  pull-requests: write # sticky review comment
+jobs:
+  lazycoder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aisona-lab/lazycoder@v1
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+The action fetches the PR diff, runs the rubric, posts (and keeps updating) a
+sticky review comment with the findings table, and fails the check according
+to `fail-on`.
+
+| Input | Default | Meaning |
+|---|---|---|
+| `anthropic-api-key` | — | Required. Missing (fork PRs) skips with a warning, never a red check |
+| `fail-on` | `request-changes` | `block` \| `request-changes` \| `never` — which verdicts fail the check |
+| `comment` | `true` | Post/update the sticky PR comment |
+| `version` | latest | Pin the lazycoder engine (PyPI version) independently of the action tag |
+| `model` / `max-tokens` | engine defaults | Forwarded as `ARGUS_MODEL` / `ARGUS_MAX_TOKENS` |
+
+Operational errors (bad key, network) always fail the check regardless of
+`fail-on`. Cost note: one model call per rubric rule per diff hunk (17 × hunks).
+
+Versioning is two-axis: the moving `@v1` tag tracks the action wrapper; the
+engine defaults to the latest PyPI release and can be pinned via `version`.
+
 ## Manual review vs lazycoder
 
 | | Manual review | lazycoder |
@@ -30,8 +68,8 @@ drops into CI as a gate with no glue code. `--json` emits the full report.
 | **Consistency** | Varies by reviewer, mood, time of day | Same rubric, same policy, deterministic |
 | **Verdict** | "LGTM" / gut feel | APPROVE / REQUEST_CHANGES / BLOCK from a severity policy |
 | **Evidence** | Comments, sometimes | Every finding cites `rule_id` + exact file:line |
-| **Green claims** | "tests pass" (trust me) | Real linter/typecheck/test output in a sandbox |
-| **Untrusted code** | Reviewer may run it locally | Reviewed code is data, never executed outside the sandbox |
+| **Green claims** | "LGTM" without proof | Verdict refused unless every rule has a recorded pass/fail (sandboxed check-running is on the roadmap) |
+| **Untrusted code** | Reviewer may run it locally | Reviewed code is treated as data — never executed |
 | **Speed at scale** | Slows down as diffs grow | Loops the rubric per block, unattended |
 | **Auditability** | Lives in someone's head | Append-only decision log; any verdict is replayable |
 
@@ -85,10 +123,13 @@ The same flow runs in two modes, sharing every line of plumbing:
   R7, and the pipeline derived `BLOCK` with zero parse failures.
 
 Because the model was the *last* thing plugged in, any failure isolates to the
-prompt or the model — never to the plumbing, which is already proven. The
-response parser is hardened against real LLM output (code fences, surrounding
-prose, severity casing), and the reviewer prompt teaches the model the exact
-`Finding` schema with a literal example, so form errors die at the source.
+prompt or the model — never to the plumbing, which is already proven. The model
+answers through a **forced `submit_review` tool call with a strict JSON schema**
+— free-text parsing fragility is eliminated at the source — and the hardened
+parser (code fences, balanced braces, severity casing) plus strict pydantic
+contracts remain as the downstream validation layer and safety net. If one
+rule's response is still unusable, it becomes a recorded per-rule error, the
+run survives, and the verdict can never be APPROVE.
 
 ## Config-driven policy
 
@@ -182,5 +223,8 @@ pytest -m integration
 6. ~~Distribution: published to [PyPI](https://pypi.org/project/lazycoder/) with
    a `lazycoder` console entry point (`uvx lazycoder my.diff`), rubric bundled
    in the wheel, releases via trusted publishing on `v*` tags.~~ ✓
-7. **GitHub Action** wrapping the CLI, so `uses: aisona-lab/lazycoder` gates a
-   PR with the same rubric and exit codes.
+7. ~~**GitHub Action** wrapping the CLI, so `uses: aisona-lab/lazycoder` gates a
+   PR with the same rubric and exit codes.~~ ✓
+8. **Sandboxed check execution** — run the diff's own linters/typecheck/tests
+   in an isolated sandbox so "green" is observed, not self-reported. Until this
+   lands, lazycoder judges the code as data and never executes it.
