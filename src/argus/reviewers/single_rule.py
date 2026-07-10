@@ -5,7 +5,7 @@ import json
 from pydantic import BaseModel, ConfigDict, ValidationError, model_validator
 
 from argus.config.models import ReviewRule, ReviewRulesConfig
-from argus.domain import Finding, ReviewReport, RuleResult
+from argus.domain import Finding, ReviewReport, RuleEvaluationError, RuleResult
 from argus.llm import LLMClient
 
 
@@ -57,8 +57,16 @@ class SingleRuleReviewer:
 
     def review_all(self, code_block: str, rules: list[ReviewRule]) -> ReviewReport:
         """Evaluate every rule on one block and aggregate into a report."""
-        results = [self.review(code_block, rule) for rule in rules]
-        return ReviewReport.from_rule_results(results)
+        results: list[RuleResult] = []
+        errors: list[RuleEvaluationError] = []
+        for rule in rules:
+            try:
+                results.append(self.review(code_block, rule))
+            except LLMReviewerParseError as exc:
+                # Only bad model output is tolerated per-rule; infra errors
+                # (API/auth/network) must propagate and abort the run.
+                errors.append(RuleEvaluationError(rule_id=rule.id, message=str(exc)))
+        return ReviewReport.from_rule_results(results, rule_errors=errors)
 
     def review_rubric(self, code_block: str, rubric: ReviewRulesConfig) -> ReviewReport:
         """Evaluate one block against every rule in the configured rubric."""
@@ -106,17 +114,20 @@ class SingleRuleReviewer:
 
     @staticmethod
     def _extract_json_object(raw_response: str) -> dict[str, object]:
-        # Slice from the first '{' to the last '}' so code fences (```json)
-        # and surrounding prose are dropped in one move.
-        # ponytail: naive brace slice; over-captures if prose after the object
-        # also contains a '}'. Switch to a bracket-matching scan if that shows up.
-        start = raw_response.find("{")
-        end = raw_response.rfind("}")
-        if start == -1 or end < start:
+        text = SingleRuleReviewer._strip_code_fence(raw_response.strip())
+        start = text.find("{")
+        if start == -1:
             msg = "Invalid reviewer response: no JSON object found"
             raise LLMReviewerParseError(msg)
+
+        end = SingleRuleReviewer._find_matching_object_end(text, start)
+        if end is None:
+            msg = "Invalid reviewer response: unterminated JSON object"
+            raise LLMReviewerParseError(msg)
+
+        snippet = text[start : end + 1]
         try:
-            payload = json.loads(raw_response[start : end + 1])
+            payload = json.loads(snippet)
         except json.JSONDecodeError as exc:
             msg = f"Invalid reviewer response: invalid JSON at line {exc.lineno}"
             raise LLMReviewerParseError(msg) from exc
@@ -124,3 +135,40 @@ class SingleRuleReviewer:
             msg = "Invalid reviewer response: expected a JSON object"
             raise LLMReviewerParseError(msg)
         return payload
+
+    @staticmethod
+    def _strip_code_fence(text: str) -> str:
+        if not text.startswith("```"):
+            return text
+        lines = text.splitlines()
+        if not lines:
+            return text
+        lines = lines[1:]
+        if lines and lines[-1].strip() == "```":
+            lines = lines[:-1]
+        return "\n".join(lines).strip()
+
+    @staticmethod
+    def _find_matching_object_end(text: str, start: int) -> int | None:
+        depth = 0
+        in_string = False
+        escape = False
+        for index in range(start, len(text)):
+            char = text[index]
+            if in_string:
+                if escape:
+                    escape = False
+                elif char == "\\":
+                    escape = True
+                elif char == '"':
+                    in_string = False
+                continue
+            if char == '"':
+                in_string = True
+            elif char == "{":
+                depth += 1
+            elif char == "}":
+                depth -= 1
+                if depth == 0:
+                    return index
+        return None

@@ -108,20 +108,59 @@ def test_parser_rejects_response_with_no_json_object() -> None:
         _review_r4("I cannot review this code.")
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="naive first-{-to-last-} slice over-captures a '}' in trailing prose; "
-    "close with a balanced-bracket scan in _extract_json_object",
-)
 def test_parser_handles_json_followed_by_prose_with_a_brace() -> None:
-    # Documents the known ceiling: object, then prose containing a brace.
-    # xfail flips to green the day the balanced scan lands — a living debt marker.
     raw = f"{_fail_finding_json()} Note: consider the {{edge}} case."
 
     result = _review_r4(raw)
 
     assert result.finding is not None
     assert result.finding.severity == Severity.HIGH
+
+
+def test_parser_handles_json_followed_by_typescript_codeblock() -> None:
+    raw = (
+        f"{_fail_finding_json()}\n\n"
+        "```typescript\n"
+        "export function Foo({ bar }: Props) {\n"
+        "  return <div>{bar}</div>;\n"
+        "}\n"
+        "```"
+    )
+
+    result = _review_r4(raw)
+
+    assert result.finding is not None
+    assert result.finding.rule_id == RuleId.R4
+
+
+def test_review_all_continues_when_one_rule_response_is_garbage() -> None:
+    config = load_all_configs()
+    rules = [r for r in config.review_rules.rules if r.id in (RuleId.R4, RuleId.R5)][:2]
+    client = FakeLLMClient(
+        responses=["this is not json", '{"passed": true, "finding": null}']
+    )
+    reviewer = SingleRuleReviewer(client=client)
+
+    report = reviewer.review_all(code_block="x = 1", rules=rules)
+
+    assert len(report.rule_results) == 1
+    assert len(report.rule_errors) == 1
+    assert report.rule_errors[0].rule_id == rules[0].id
+    assert report.verdict == Verdict.REQUEST_CHANGES
+
+
+def test_review_all_propagates_infrastructure_errors() -> None:
+    class _BrokenClient:
+        def generate(self, prompt: str) -> str:
+            msg = "connection refused"
+            raise RuntimeError(msg)
+
+    config = load_all_configs()
+    rules = [r for r in config.review_rules.rules if r.id == RuleId.R4]
+    reviewer = SingleRuleReviewer(client=_BrokenClient())
+
+    with pytest.raises(RuntimeError, match="connection refused"):
+        reviewer.review_all(code_block="x = 1", rules=rules)
 
 
 def test_review_all_aggregates_rule_results_into_report() -> None:

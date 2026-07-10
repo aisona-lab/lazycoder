@@ -3,7 +3,15 @@ from __future__ import annotations
 import pytest
 
 from argus.config import load_all_configs
-from argus.domain import CodeLocation, Finding, RuleId, Severity, Verdict, aggregate
+from argus.domain import (
+    CodeLocation,
+    Finding,
+    RuleId,
+    Severity,
+    Verdict,
+    aggregate,
+    derive_verdict,
+)
 
 
 def make_finding(severity: Severity) -> Finding:
@@ -44,3 +52,18 @@ def test_aggregate_is_severity_driven(
     findings: list[Finding], expected: Verdict
 ) -> None:
     assert aggregate(findings) == expected
+
+
+@pytest.mark.parametrize(
+    ("findings", "evaluation_errors", "expected"),
+    [
+        ([], False, Verdict.APPROVE),
+        ([], True, Verdict.REQUEST_CHANGES),
+        ([make_finding(Severity.HIGH)], True, Verdict.BLOCK),
+        ([make_finding(Severity.LOW)], True, Verdict.REQUEST_CHANGES),
+    ],
+)
+def test_derive_verdict_never_approves_with_evaluation_errors(
+    findings: list[Finding], evaluation_errors: bool, expected: Verdict
+) -> None:
+    assert derive_verdict(findings, evaluation_errors=evaluation_errors) == expected

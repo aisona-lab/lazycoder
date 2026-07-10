@@ -10,6 +10,7 @@ from argus.domain import (
     CodeLocation,
     Finding,
     ReviewReport,
+    RuleEvaluationError,
     RuleId,
     RuleResult,
     Severity,
@@ -128,6 +129,19 @@ def test_review_report_derives_verdict_from_findings() -> None:
                 reason="float used for money",
             )
         ]
+    )
+    assert report.verdict == Verdict.REQUEST_CHANGES
+
+
+def test_review_report_with_rule_errors_never_approves() -> None:
+    report = ReviewReport(
+        findings=[],
+        rule_errors=[
+            RuleEvaluationError(
+                rule_id=RuleId.R4,
+                message="Invalid reviewer response: no JSON object found",
+            )
+        ],
     )
     assert report.verdict == Verdict.REQUEST_CHANGES
 

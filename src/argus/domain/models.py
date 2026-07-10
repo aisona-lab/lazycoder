@@ -33,6 +33,13 @@ class Finding(_StrictModel):
     reason: str = Field(min_length=1)
 
 
+class RuleEvaluationError(_StrictModel):
+    """A rubric rule that could not be evaluated."""
+
+    rule_id: RuleId
+    message: str = Field(min_length=1)
+
+
 class RuleResult(_StrictModel):
     """Outcome of evaluating one rubric rule against a code block."""
 
@@ -60,19 +67,37 @@ class ReviewReport(_StrictModel):
 
     findings: list[Finding]
     rule_results: list[RuleResult] = Field(default_factory=list)
+    rule_errors: list[RuleEvaluationError] = Field(default_factory=list)
 
     @classmethod
-    def from_rule_results(cls, rule_results: list[RuleResult]) -> ReviewReport:
+    def from_rule_results(
+        cls,
+        rule_results: list[RuleResult],
+        *,
+        rule_errors: list[RuleEvaluationError] | None = None,
+    ) -> ReviewReport:
         """Build a report from rule outcomes; findings come from failed rules."""
         findings = [r.finding for r in rule_results if r.finding is not None]
-        return cls(findings=findings, rule_results=rule_results)
+        return cls(
+            findings=findings,
+            rule_results=rule_results,
+            rule_errors=rule_errors or [],
+        )
+
+    @classmethod
+    def merge(cls, reports: list[ReviewReport]) -> ReviewReport:
+        """Combine per-block reports into one global report."""
+        return cls.from_rule_results(
+            [result for report in reports for result in report.rule_results],
+            rule_errors=[error for report in reports for error in report.rule_errors],
+        )
 
     @computed_field  # type: ignore[prop-decorator]
     @property
     def verdict(self) -> Verdict:
-        from argus.domain.aggregator import aggregate
+        from argus.domain.aggregator import derive_verdict
 
-        return aggregate(self.findings)
+        return derive_verdict(self.findings, evaluation_errors=bool(self.rule_errors))
 
     @model_validator(mode="after")
     def findings_align_with_rule_results(self) -> ReviewReport:

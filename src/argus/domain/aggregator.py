@@ -11,3 +11,13 @@ def aggregate(findings: list[Finding]) -> Verdict:
     if findings:
         return Verdict.REQUEST_CHANGES
     return Verdict.APPROVE
+
+
+def derive_verdict(findings: list[Finding], *, evaluation_errors: bool) -> Verdict:
+    """Apply severity policy, but never APPROVE when some rules failed to evaluate."""
+    finding_verdict = aggregate(findings)
+    if not evaluation_errors:
+        return finding_verdict
+    if finding_verdict is Verdict.BLOCK:
+        return Verdict.BLOCK
+    return Verdict.REQUEST_CHANGES

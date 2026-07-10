@@ -140,11 +140,6 @@ that make the review logic trustworthy.
   single source of truth and never loosens. Leniency lives at the edge; the core
   does not bend.
 
-- **Debt is executable, not documented.** The one known parser limitation is
-  pinned by a `strict` xfail test, not a comment someone can ignore. The day the
-  fix lands, that test flips to green and the suite *tells you* the debt is
-  closed. Notes rot; tests don't.
-
 - **TDD throughout.** Every behavior went RED before GREEN — including the
   garbage-input fixtures that hardened the parser.
 

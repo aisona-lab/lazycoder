@@ -11,7 +11,7 @@ from argus.config.exceptions import ConfigLoadError
 from argus.domain import ReviewReport, Verdict
 from argus.llm.anthropic_client import AnthropicClient
 from argus.orchestrator import review_diff
-from argus.reviewers import LLMReviewerParseError, SingleRuleReviewer
+from argus.reviewers import SingleRuleReviewer
 
 EXIT_CODES = {Verdict.APPROVE: 0, Verdict.REQUEST_CHANGES: 1, Verdict.BLOCK: 2}
 EXIT_ERROR = 3
@@ -36,6 +36,8 @@ def _render(report: ReviewReport) -> str:
             f"  {finding.rule_id.value} {location}"
             f" [{finding.severity.value}] {finding.reason}"
         )
+    for error in report.rule_errors:
+        lines.append(f"  ERROR {error.rule_id.value}: {error.message}")
     return "\n".join(lines)
 
 
@@ -73,14 +75,13 @@ def main(argv: list[str] | None = None) -> int:
         report = review_diff(reviewer, diff_text, rubric)
     except (
         ConfigLoadError,
-        LLMReviewerParseError,
         RuntimeError,
         anthropic.APIError,
     ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
 
-    if not report.rule_results:
+    if not report.rule_results and not report.rule_errors:
         # Hard rule: never APPROVE unless every rule was evaluated — an empty
         # diff evaluated nothing, so it gets an error, not a green verdict.
         print("error: no reviewable hunks found in the diff", file=sys.stderr)
