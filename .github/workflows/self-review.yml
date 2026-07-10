@@ -1,0 +1,17 @@
+name: self-review
+
+on: pull_request
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  lazycoder:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./
+        with:
+          anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+          fail-on: never # advisory while dogfooding
