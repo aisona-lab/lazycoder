@@ -2,7 +2,8 @@ name: publish
 
 on:
   push:
-    tags: ["v*"]
+    # Semver tags only — the moving Action tag (v1) must not trigger a publish.
+    tags: ["v[0-9]*.[0-9]*.[0-9]*"]
 
 jobs:
   pypi:
@@ -17,6 +18,7 @@ jobs:
           uv sync --extra dev
           uv run pytest -q
           uv run ruff check .
+          uv run black --check .
           uv run mypy src
       - run: uv build
       - run: uv publish --trusted-publishing always
