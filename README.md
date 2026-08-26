@@ -303,8 +303,10 @@ pytest -m integration
 7. ~~**GitHub Action** wrapping the CLI, so `uses: aisona-lab/lazycoder` gates a
    PR with the same rubric and exit codes.~~ ✓
 8. **A real corpus** — 30–50 hunks from merged OSS PRs, half with a defect the
-   follow-up fix confirms, half genuinely clean. Publish the per-rule numbers
-   and delete the rules that do not earn their place.
+   follow-up fix confirms, half genuinely clean. Harvester and scoring are
+   built (`scripts/corpus_cli.py`); the cull thresholds are pre-registered in
+   [`docs/hardening-plan.md`](docs/hardening-plan.md) so the result is a
+   measurement rather than a rationalisation. What remains is labelling.
 9. **File-level context** — review the whole post-change file with the diff
    marked inside it, so the system-level rules (state, compatibility,
    concurrency) become answerable instead of abstaining. Cheaper too: a 40-hunk

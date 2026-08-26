@@ -83,6 +83,38 @@ Until this stage has a number, the Action ships `fail-on: never` (done). A tool
 with an unmeasured false-positive rate cannot be a blocking gate — and at 0.17
 precision the measured one cannot either.
 
+### Pre-registered decision rules
+
+Fixed on 2026-08-26, **before any corpus data exists**. Chosen after the toy
+suite (precision 0.17) but before a single real hunk has been scored. Written
+down here so the cull is a measurement and not a rationalisation — if these
+turn out to be the wrong thresholds, they get changed in a commit that says so,
+not quietly while reading the results.
+
+Corpus shape: **≥20 clean** hunks and **≥15 defective**, from non-bot merged
+PRs of mature repositories. Clean means the hunk is still untouched by any
+later fix; defective means a follow-up commit fixed a specific defect in it.
+
+Per rule, after scoring:
+
+| Condition | Action |
+|---|---|
+| `clean_noise_rate > 25%` **and** `caught == 0` | **Delete.** It interrupts constantly and has never been right. |
+| `clean_noise_rate > 10%` and severity is `high` | **Demote to medium.** Its noise must not block. |
+| `abstention_rate > 50%` **and** `clean_noise_rate < 10%` | **Keep, route to Stage 3a.** Silent is not the same failure as noisy — this rule is being asked at the wrong level of context, not asked the wrong question. |
+| otherwise | **Keep.** |
+
+Gate for flipping the Action's `fail-on` back to `request-changes`:
+**`quiet_rate ≥ 80%`** and no `high`-severity rule above **5%** clean noise. In
+words: at least four in five clean hunks draw no comment at all, and nothing
+that can block fires on clean code more than one time in twenty.
+
+Two things this deliberately does *not* do. It does not set a recall floor —
+recall is already 0.92 and is not the failing number, so a threshold there
+would only give the cull an excuse to keep noisy rules. And it does not score
+`unlabelled` findings on defective hunks in either direction; they get read by
+a human and either become labels or become nothing.
+
 ## Stage 3a — the file is the unit (~1 day)
 
 Feed the whole post-change file with the diff marked inside it. `file` and
