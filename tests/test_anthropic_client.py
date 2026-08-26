@@ -6,14 +6,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from anthropic.types import TextBlock, ToolUseBlock
 
-from argus.config import load_all_configs
-from argus.domain import RuleId, Severity
-from argus.llm.anthropic_client import (
+from lazycoder.config import load_all_configs
+from lazycoder.domain import CodeBlock, RuleId, Severity
+from lazycoder.llm.anthropic_client import (
     DEFAULT_MAX_TOKENS,
     SUBMIT_REVIEW_TOOL,
     AnthropicClient,
 )
-from argus.reviewers import SingleRuleReviewer
+from lazycoder.reviewers import SingleRuleReviewer
 
 
 def _tool_block(payload: dict) -> ToolUseBlock:
@@ -26,7 +26,7 @@ def _client_with_response(
     monkeypatch, content: list
 ) -> tuple[AnthropicClient, MagicMock]:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    with patch("argus.llm.anthropic_client.anthropic.Anthropic") as mock_cls:
+    with patch("lazycoder.llm.anthropic_client.anthropic.Anthropic") as mock_cls:
         create = MagicMock(return_value=MagicMock(content=content))
         mock_cls.return_value.messages.create = create
         client = AnthropicClient()
@@ -35,9 +35,9 @@ def _client_with_response(
 
 def test_anthropic_client_uses_configurable_max_tokens(monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setenv("ARGUS_MAX_TOKENS", "16384")
+    monkeypatch.setenv("LAZYCODER_MAX_TOKENS", "16384")
 
-    with patch("argus.llm.anthropic_client.anthropic.Anthropic") as mock_cls:
+    with patch("lazycoder.llm.anthropic_client.anthropic.Anthropic") as mock_cls:
         mock_cls.return_value.messages.create = MagicMock(
             return_value=MagicMock(content=[])
         )
@@ -50,9 +50,10 @@ def test_anthropic_client_uses_configurable_max_tokens(monkeypatch) -> None:
 
 def test_anthropic_client_default_max_tokens_is_not_2048(monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("LAZYCODER_MAX_TOKENS", raising=False)
     monkeypatch.delenv("ARGUS_MAX_TOKENS", raising=False)
 
-    with patch("argus.llm.anthropic_client.anthropic.Anthropic"):
+    with patch("lazycoder.llm.anthropic_client.anthropic.Anthropic"):
         client = AnthropicClient()
 
     assert client._max_tokens == DEFAULT_MAX_TOKENS
@@ -61,10 +62,12 @@ def test_anthropic_client_default_max_tokens_is_not_2048(monkeypatch) -> None:
 
 def test_anthropic_client_rejects_non_integer_max_tokens(monkeypatch) -> None:
     monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
-    monkeypatch.setenv("ARGUS_MAX_TOKENS", "8k")
+    monkeypatch.setenv("LAZYCODER_MAX_TOKENS", "8k")
 
-    with patch("argus.llm.anthropic_client.anthropic.Anthropic"):
-        with pytest.raises(RuntimeError, match="ARGUS_MAX_TOKENS must be an integer"):
+    with patch("lazycoder.llm.anthropic_client.anthropic.Anthropic"):
+        with pytest.raises(
+            RuntimeError, match="LAZYCODER_MAX_TOKENS must be an integer"
+        ):
             AnthropicClient()
 
 
@@ -101,22 +104,33 @@ def test_tool_input_round_trips_through_the_reviewer(monkeypatch) -> None:
     config = load_all_configs()
     rule = next(rule for rule in config.review_rules.rules if rule.id == RuleId.R7)
     payload = {
-        "passed": False,
-        "finding": {
-            "rule_id": "R7",
-            "location": {"file": "query.py", "line": 4, "end_line": None},
-            "severity": "high",
-            "reason": "user input concatenated into SQL",
-        },
+        "outcome": "fail",
+        "line": 4,
+        "end_line": None,
+        "reason": "user input concatenated into SQL",
     }
     client, _ = _client_with_response(monkeypatch, [_tool_block(payload)])
     reviewer = SingleRuleReviewer(client=client)
 
-    result = reviewer.review(code_block="q = 'select ' + user_input", rule=rule)
+    result = reviewer.review(
+        CodeBlock(file="query.py", start_line=4, code="q = 'select ' + user_input"),
+        rule=rule,
+    )
 
     assert result.passed is False
     assert result.finding is not None
     assert result.finding.rule_id == RuleId.R7
+    # file, rule_id and severity are harness-side facts, not model output.
     assert result.finding.location.file == "query.py"
     assert result.finding.location.line == 4
     assert result.finding.severity == Severity.HIGH
+
+
+def test_legacy_argus_env_vars_still_work(monkeypatch) -> None:
+    # Published on PyPI and the Marketplace under the old name; renaming the
+    # package must not silently change anyone's model.
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "test-key")
+    monkeypatch.delenv("LAZYCODER_MODEL", raising=False)
+    monkeypatch.setenv("ARGUS_MODEL", "claude-haiku-4-5-20251001")
+    with patch("lazycoder.llm.anthropic_client.anthropic.Anthropic"):
+        assert AnthropicClient().model == "claude-haiku-4-5-20251001"

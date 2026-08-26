@@ -1,0 +1,43 @@
+model: claude-opus-5
+rubric_sha256: 9441b948a94baa9056c95b1384bbb64890930eb99c770891b382d41b13bfac83
+date: 2026-08-26
+command: scripts/run_evals.py
+
+13 cases x 17 rules = 221 model calls
+
+FAIL E1    verdict BLOCK  noise R12,R3  abstained R11,R13,R14,R16
+FAIL E2    verdict BLOCK (expected REQUEST_CHANGES)  noise R12,R4  abstained R11,R13,R14,R16
+FAIL E3    verdict BLOCK  noise R12,R3,R4,R5  abstained R11,R13,R14,R16,R2,R6,R9
+FAIL E4    verdict BLOCK (expected REQUEST_CHANGES)  noise R2,R3,R4,R8  abstained R11,R14
+FAIL E5    verdict REQUEST_CHANGES (expected APPROVE)  noise R12  abstained R14
+FAIL E6    verdict REQUEST_CHANGES (expected BLOCK)  missed R7  noise R15,R3  abstained R1,R10,R11,R12,R13,R14,R16,R4,R6,R7,R9
+FAIL E7    verdict BLOCK (expected REQUEST_CHANGES)  noise R12,R15,R16,R3,R4  abstained R11,R14
+FAIL E8    verdict BLOCK (expected REQUEST_CHANGES)  noise R12,R3,R4,R7  abstained R11,R13,R16
+FAIL E9    verdict BLOCK (expected REQUEST_CHANGES)  noise R12,R13,R2,R3,R4,R8  abstained R1,R11,R14,R16,R6
+FAIL E10   verdict BLOCK (expected REQUEST_CHANGES)  noise R12,R3,R4  abstained R1,R10,R11,R13,R14,R15,R17,R2,R5,R6,R7,R8,R9
+FAIL E11   verdict BLOCK (expected REQUEST_CHANGES)  noise R12,R13,R3,R4,R5,R9  abstained R1,R11,R14
+FAIL E12   verdict BLOCK  noise R12,R13,R15,R3,R4,R5,R8  abstained R1,R11,R14,R16,R6,R9
+FAIL E13   verdict BLOCK  noise R12,R13,R14,R15,R3,R4,R5  abstained R1,R11,R16
+
+cases     0/13
+precision 0.17  (11 true, 53 false)
+recall    0.92  (11 caught, 1 missed)
+
+rule    tp  fp  fn  abstain
+R1       1   0   0     46%
+R2       0   2   0     15%
+R3       1  11   0      0%
+R4       1  10   0      8%
+R5       0   4   0      8%
+R6       0   0   0     38%
+R7       3   1   1     15%
+R8       0   3   0      8%
+R9       0   1   0     31%
+R10      0   0   0     15%
+R11      0   0   0     92%
+R12      0  11   0      8%
+R13      1   4   0     46%
+R14      1   1   0     85%
+R15      1   4   0      8%
+R16      1   1   0     62%
+R17      1   0   0      8%

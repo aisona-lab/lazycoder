@@ -1,8 +1,21 @@
 {
   "description": "ADDED BY MENTOR. Reliability is the engineer's job, not the model's. Every run must be traceable and auditable, or you cannot debug a bad review or defend a good one.",
   "decision_log": {
-    "storage": "append-only (SQLite dev / Postgres prod); never edited or deleted",
-    "record_per_run": ["run_id", "target_diff", "plan", "each_step", "findings_with_rule_ids", "tool_outputs", "final_verdict", "human_decision", "timestamps"]
+    "storage": "append-only JSONL via `lazycoder --log PATH`; never rewritten in place. A database is a later swap, not a prerequisite.",
+    "record_per_run": [
+      "run_id",
+      "engine_version",
+      "model",
+      "rubric_sha256",
+      "diff_sha256",
+      "started_at",
+      "finished_at",
+      "rule_results (outcome, severity, finding or abstention note)",
+      "rule_errors",
+      "findings_with_rule_ids",
+      "final_verdict"
+    ],
+    "replay": "the verdict is a pure function of rule_results and the rubric, so derive_verdict recomputes it from the record with no model call"
   },
   "tracing": {
     "trace_each_subagent_step": true,
@@ -11,8 +24,25 @@
   },
   "logging": {
     "format": "structured JSON",
-    "levels": ["INFO", "WARN", "ERROR"],
-    "redact": ["API_KEY", "SECRET", "TOKEN", "PASSWORD", "PRIVATE_KEY"]
+    "levels": [
+      "INFO",
+      "WARN",
+      "ERROR"
+    ],
+    "redact": [
+      "API_KEY",
+      "SECRET",
+      "TOKEN",
+      "PASSWORD",
+      "PRIVATE_KEY"
+    ]
   },
-  "metrics": ["reviews_per_run", "findings_by_severity", "eval_precision", "eval_recall", "tokens_used", "human_override_rate"]
+  "metrics": [
+    "reviews_per_run",
+    "findings_by_severity",
+    "eval_precision",
+    "eval_recall",
+    "tokens_used",
+    "human_override_rate"
+  ]
 }

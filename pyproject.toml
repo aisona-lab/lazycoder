@@ -14,7 +14,7 @@ dependencies = [
 Repository = "https://github.com/aisona-lab/lazycoder"
 
 [project.scripts]
-lazycoder = "argus.cli:main"
+lazycoder = "lazycoder.cli:main"
 
 [project.optional-dependencies]
 dev = [
@@ -30,10 +30,10 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/argus"]
+packages = ["src/lazycoder"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"config" = "argus/config_defaults"
+"config" = "lazycoder/config_defaults"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -58,5 +58,5 @@ line-length = 88
 [tool.mypy]
 python_version = "3.12"
 strict = true
-packages = ["argus"]
+packages = ["lazycoder"]
 mypy_path = "src"

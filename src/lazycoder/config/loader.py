@@ -5,8 +5,8 @@ from pathlib import Path
 
 from pydantic import BaseModel, ValidationError
 
-from argus.config.exceptions import ConfigLoadError
-from argus.config.models import (
+from lazycoder.config.exceptions import ConfigLoadError
+from lazycoder.config.models import (
     AppConfig,
     EvalsConfig,
     GuardrailsConfig,

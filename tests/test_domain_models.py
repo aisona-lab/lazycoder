@@ -5,13 +5,14 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from argus.config import load_all_configs
-from argus.domain import (
+from lazycoder.config import load_all_configs
+from lazycoder.domain import (
     CodeLocation,
     Finding,
     ReviewReport,
     RuleEvaluationError,
     RuleId,
+    RuleOutcome,
     RuleResult,
     Severity,
     Verdict,
@@ -64,7 +65,12 @@ def test_rule_result_failed_requires_matching_finding() -> None:
         severity=Severity.HIGH,
         reason="string-concatenated SQL is injectable",
     )
-    result = RuleResult(rule_id=RuleId.R7, passed=False, finding=finding)
+    result = RuleResult(
+        rule_id=RuleId.R7,
+        outcome=RuleOutcome.FAIL,
+        severity=Severity.HIGH,
+        finding=finding,
+    )
     assert result.finding is finding
 
 
@@ -75,8 +81,13 @@ def test_rule_result_passed_must_not_carry_finding() -> None:
         severity=Severity.LOW,
         reason="unnecessary scan",
     )
-    with pytest.raises(ValidationError, match="passed rule must not include"):
-        RuleResult(rule_id=RuleId.R1, passed=True, finding=finding)
+    with pytest.raises(ValidationError, match="only a failed rule may carry"):
+        RuleResult(
+            rule_id=RuleId.R1,
+            outcome=RuleOutcome.PASS,
+            severity=Severity.LOW,
+            finding=finding,
+        )
 
 
 def test_rule_result_finding_rule_id_must_match() -> None:
@@ -87,7 +98,12 @@ def test_rule_result_finding_rule_id_must_match() -> None:
         reason="float used for money",
     )
     with pytest.raises(ValidationError, match="finding.rule_id must match"):
-        RuleResult(rule_id=RuleId.R4, passed=False, finding=finding)
+        RuleResult(
+            rule_id=RuleId.R4,
+            outcome=RuleOutcome.FAIL,
+            severity=Severity.MEDIUM,
+            finding=finding,
+        )
 
 
 def test_review_report_links_findings_to_failed_rule_results() -> None:
@@ -99,7 +115,14 @@ def test_review_report_links_findings_to_failed_rule_results() -> None:
     )
     report = ReviewReport(
         findings=[finding],
-        rule_results=[RuleResult(rule_id=RuleId.R4, passed=False, finding=finding)],
+        rule_results=[
+            RuleResult(
+                rule_id=RuleId.R4,
+                outcome=RuleOutcome.FAIL,
+                severity=Severity.HIGH,
+                finding=finding,
+            )
+        ],
     )
     assert report.verdict == Verdict.BLOCK
     assert len(report.findings) == 1
@@ -115,22 +138,52 @@ def test_review_report_rejects_orphan_failed_rule_result() -> None:
     with pytest.raises(ValidationError, match="failed rule_result finding"):
         ReviewReport(
             findings=[],
-            rule_results=[RuleResult(rule_id=RuleId.R4, passed=False, finding=finding)],
+            rule_results=[
+                RuleResult(
+                    rule_id=RuleId.R4,
+                    outcome=RuleOutcome.FAIL,
+                    severity=Severity.HIGH,
+                    finding=finding,
+                )
+            ],
         )
 
 
-def test_review_report_derives_verdict_from_findings() -> None:
+def test_review_report_derives_verdict_from_rule_results() -> None:
+    finding = Finding(
+        rule_id=RuleId.R3,
+        location=CodeLocation(file="money.py", line=3),
+        severity=Severity.MEDIUM,
+        reason="float used for money",
+    )
     report = ReviewReport(
-        findings=[
-            Finding(
+        findings=[finding],
+        rule_results=[
+            RuleResult(
                 rule_id=RuleId.R3,
-                location=CodeLocation(file="money.py", line=3),
+                outcome=RuleOutcome.FAIL,
                 severity=Severity.MEDIUM,
-                reason="float used for money",
+                finding=finding,
             )
-        ]
+        ],
     )
     assert report.verdict == Verdict.REQUEST_CHANGES
+
+
+def test_review_report_rejects_a_finding_no_rule_produced() -> None:
+    # The verdict reads rule_results, so a free-floating finding would be a
+    # report that shows an issue and still says APPROVE.
+    with pytest.raises(ValidationError, match="must come from a failed rule_result"):
+        ReviewReport(
+            findings=[
+                Finding(
+                    rule_id=RuleId.R3,
+                    location=CodeLocation(file="money.py", line=3),
+                    severity=Severity.MEDIUM,
+                    reason="float used for money",
+                )
+            ]
+        )
 
 
 def test_review_report_with_rule_errors_never_approves() -> None:

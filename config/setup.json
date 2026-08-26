@@ -1,7 +1,16 @@
 {
-  "runtime": { "python": ">=3.12" },
+  "runtime": {
+    "python": ">=3.12"
+  },
   "dependencies": {
-    "required": ["anthropic", "pydantic", "ruff", "black", "mypy", "pytest"],
+    "required": [
+      "anthropic",
+      "pydantic",
+      "ruff",
+      "black",
+      "mypy",
+      "pytest"
+    ],
     "rationale": {
       "anthropic": "LLM access",
       "pydantic": "validate config files and structured LLM output (never trust raw output)",
@@ -11,6 +20,9 @@
   },
   "env_vars": {
     "ANTHROPIC_API_KEY": "required; read from environment; never committed",
+    "LAZYCODER_MODEL": "optional; overrides the default model id",
+    "LAZYCODER_MAX_TOKENS": "optional; max output tokens per rule call",
+    "ARGUS_MODEL / ARGUS_MAX_TOKENS": "deprecated aliases, still honoured",
     "LOG_LEVEL": "optional; default INFO"
   },
   "files_to_create": [

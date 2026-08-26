@@ -7,9 +7,9 @@ from pathlib import Path
 
 import pytest
 
-from argus.config.exceptions import ConfigLoadError
-from argus.config.loader import CONFIG_FILES, load_all_configs, load_config_file
-from argus.config.models import HarnessConfig, ReviewRulesConfig
+from lazycoder.config.exceptions import ConfigLoadError
+from lazycoder.config.loader import CONFIG_FILES, load_all_configs, load_config_file
+from lazycoder.config.models import HarnessConfig, ReviewRulesConfig
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_DIR = REPO_ROOT / "config"
@@ -24,7 +24,7 @@ def test_each_config_file_loads_and_validates(filename: str) -> None:
 
 def test_load_all_configs_returns_app_config() -> None:
     app = load_all_configs(CONFIG_DIR)
-    assert app.harness.project.codename == "Argus"
+    assert app.harness.project.codename == "lazycoder"
     assert len(app.review_rules.rules) >= 12
     assert len(app.evals.cases) >= 5
 
@@ -63,7 +63,7 @@ def test_unknown_extra_field_fails_loudly(tmp_path: Path) -> None:
     bad.write_text(json.dumps(payload), encoding="utf-8")
 
     # load_all needs all files; test single-file validation instead
-    from argus.config.models import GuardrailsConfig
+    from lazycoder.config.models import GuardrailsConfig
 
     with pytest.raises(ConfigLoadError, match="typo_field|extra"):
         load_config_file(bad, GuardrailsConfig)

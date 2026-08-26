@@ -4,11 +4,11 @@ from pathlib import Path
 
 import pytest
 
-from argus import cli
-from argus.config.models import ReviewRulesConfig
-from argus.domain import RuleId
-from argus.llm import FakeLLMClient
-from conftest import SQL_INJECTION_CODE
+from conftest import PASS_RESPONSE, SQL_INJECTION_CODE, fail_response
+from lazycoder import cli
+from lazycoder.config.models import ReviewRulesConfig
+from lazycoder.domain import RuleId
+from lazycoder.llm import FakeLLMClient
 
 SQL_INJECTION_DIFF = (
     "--- a/app.py\n"
@@ -18,15 +18,7 @@ SQL_INJECTION_DIFF = (
     f"+    {SQL_INJECTION_CODE}\n"
 )
 
-PASS_RESPONSE = '{"passed": true, "finding": null}'
-
-R7_FINDING_RESPONSE = (
-    '{"passed": false, "finding": {'
-    '"rule_id": "R7",'
-    '"location": {"file": "app.py", "line": 2},'
-    '"severity": "high",'
-    '"reason": "string-concatenated SQL is injectable"}}'
-)
+R7_FINDING_RESPONSE = fail_response(2, "string-concatenated SQL is injectable")
 
 
 def test_cli_reviews_diff_and_maps_verdict_to_exit_code(

@@ -59,7 +59,7 @@
     "subagent_tools_are_least_privilege": true
   },
   "aggregation": {
-    "verdict_policy": "Severity-driven: BLOCK if any finding is high severity; REQUEST_CHANGES if any finding is medium or low severity; APPROVE only if there are no findings.",
+    "verdict_policy": "Severity-driven and model-independent: BLOCK if any finding is high severity; REQUEST_CHANGES if any finding is medium or low severity, if any rule failed to evaluate, or if any high-severity rule returned insufficient_context; APPROVE only if there are no findings and every high-severity rule was actually resolved.",
     "dedupe_findings": true,
     "order_findings_by": "severity desc, then file, then line"
   }

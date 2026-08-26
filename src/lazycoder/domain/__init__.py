@@ -1,8 +1,9 @@
 """Domain contracts: findings, rule outcomes, and review reports."""
 
-from argus.domain.aggregator import aggregate, derive_verdict
-from argus.domain.enums import RuleId, Severity, Verdict
-from argus.domain.models import (
+from lazycoder.domain.aggregator import derive_verdict
+from lazycoder.domain.enums import RuleId, RuleOutcome, Severity, Verdict
+from lazycoder.domain.models import (
+    CodeBlock,
     CodeLocation,
     Finding,
     ReviewReport,
@@ -11,14 +12,15 @@ from argus.domain.models import (
 )
 
 __all__ = [
-    "aggregate",
-    "derive_verdict",
+    "CodeBlock",
     "CodeLocation",
     "Finding",
     "ReviewReport",
     "RuleEvaluationError",
     "RuleId",
+    "RuleOutcome",
     "RuleResult",
     "Severity",
     "Verdict",
+    "derive_verdict",
 ]

@@ -1,7 +1,15 @@
 {
   "description": "The interrogation rubric the review agent applies to AI-generated code. Every finding must cite a rule id and a code location. A block passes only when each applicable rule has a satisfactory answer.",
-  "verdicts": ["APPROVE", "REQUEST_CHANGES", "BLOCK"],
-  "severity_levels": ["low", "medium", "high"],
+  "verdicts": [
+    "APPROVE",
+    "REQUEST_CHANGES",
+    "BLOCK"
+  ],
+  "severity_levels": [
+    "low",
+    "medium",
+    "high"
+  ],
   "categories": {
     "code_level": "Line and block-level decisions.",
     "correctness": "Does it actually do the right thing?",
@@ -120,7 +128,7 @@
       "checks": "What must ALWAYS be true here, and is it enforced by design rather than a hopeful check?",
       "good_answer": "The invariant is named and made structurally hard to violate.",
       "flag_when": "A critical invariant is only hoped for, or not identified at all.",
-      "severity_if_unjustified": "high"
+      "severity_if_unjustified": "medium"
     },
     {
       "id": "R13",
@@ -129,7 +137,7 @@
       "checks": "Does the logic satisfy the stated requirement across normal, boundary, and off-by-one cases? Trace it against the intended behavior, not only the happy path.",
       "good_answer": "The logic meets the requirement on normal and boundary inputs.",
       "flag_when": "Clean, safe code that solves the wrong problem or misses a boundary case.",
-      "severity_if_unjustified": "high",
+      "severity_if_unjustified": "medium",
       "note": "The biggest gap in most rubrics: they check HOW code is written, not WHETHER it is correct."
     },
     {
@@ -139,7 +147,7 @@
       "checks": "Do tests exist, run green, and exercise the empty/null/large/malicious and boundary cases the reviewers flagged, not just the happy path?",
       "good_answer": "Tests exist, run, and cover the risky paths (especially the R4 failure modes).",
       "flag_when": "No tests, or tests that only cover the happy path while flagged failure modes go untested.",
-      "severity_if_unjustified": "high"
+      "severity_if_unjustified": "medium"
     },
     {
       "id": "R15",
@@ -157,7 +165,7 @@
       "checks": "Does it change a public API, a data contract, or a behavior that other code or callers depend on? Are dependents updated, or is the change backward-compatible?",
       "good_answer": "No external contract is broken, or all dependents are updated and covered by tests.",
       "flag_when": "A signature, contract, or behavior changes and existing callers are not accounted for.",
-      "severity_if_unjustified": "high"
+      "severity_if_unjustified": "medium"
     },
     {
       "id": "R17",
@@ -166,7 +174,8 @@
       "checks": "If state is shared or work is async/parallel, can two paths interleave to corrupt state or double-act? Is access synchronized or made idempotent?",
       "good_answer": "Shared state is synchronized, or operations are idempotent and safe to interleave.",
       "flag_when": "Shared mutable state accessed concurrently without synchronization, or a check-then-act race.",
-      "severity_if_unjustified": "high"
+      "severity_if_unjustified": "medium"
     }
-  ]
+  ],
+  "severity_policy": "severity_if_unjustified is rubric data, not model output: it is the weight the verdict aggregator applies when this rule fails, and when this rule abstains for lack of context. Only rules that a single hunk can actually answer are high; a rule that must guess must not be able to BLOCK."
 }

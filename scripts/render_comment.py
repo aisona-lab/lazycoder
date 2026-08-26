@@ -46,6 +46,23 @@ def render(report_path: str, verdict: str, stderr_path: str) -> str:
     elif verdict == "APPROVE":
         lines += ["No findings — every rubric rule passed.", ""]
 
+    abstentions = [
+        result
+        for result in report.get("rule_results", [])
+        if result.get("outcome") == "insufficient_context"
+    ]
+    if abstentions:
+        # Without this a verdict driven purely by abstentions renders as a
+        # warning with nothing under it.
+        lines.append("**Rules that could not be judged from this diff:**")
+        lines += [
+            f"- `{result.get('rule_id', '?')}`"
+            f" ({result.get('severity', '?')}):"
+            f" {_cell(result.get('note') or 'no reason given')}"
+            for result in abstentions
+        ]
+        lines.append("")
+
     rule_errors = report.get("rule_errors", [])
     if rule_errors:
         lines.append("**Rules that could not be evaluated:**")
@@ -64,7 +81,8 @@ def render(report_path: str, verdict: str, stderr_path: str) -> str:
             lines += ["```", stderr[:4000], "```", ""]
 
     lines.append(
-        f"<sub>{len(findings)} finding(s), {len(rule_errors)} rule error(s)"
+        f"<sub>{len(findings)} finding(s), {len(abstentions)} abstention(s),"
+        f" {len(rule_errors)} rule error(s)"
         " — R1..R17 rubric via [lazycoder](https://github.com/aisona-lab/lazycoder)</sub>"
     )
 

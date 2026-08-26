@@ -11,6 +11,19 @@ class Verdict(StrEnum):
     BLOCK = "BLOCK"
 
 
+class RuleOutcome(StrEnum):
+    """How one rubric rule resolved against one code block.
+
+    INSUFFICIENT_CONTEXT is the escape hatch that stops the model from having
+    to guess: a rule it cannot answer from the block in front of it abstains
+    instead of inventing a pass or a fail.
+    """
+
+    PASS = "pass"
+    FAIL = "fail"
+    INSUFFICIENT_CONTEXT = "insufficient_context"
+
+
 class Severity(StrEnum):
     """Finding severity; drives verdict aggregation."""
 

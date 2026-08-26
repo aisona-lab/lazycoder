@@ -4,7 +4,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from argus.domain.enums import RuleId, Severity, Verdict
+from lazycoder.domain.enums import RuleId, Severity, Verdict
 
 RuleCategory = Literal[
     "code_level",
@@ -211,6 +211,7 @@ class ReviewRule(_StrictModel):
 
 class ReviewRulesConfig(_StrictModel):
     description: str
+    severity_policy: str | None = None
     verdicts: list[Verdict]
     severity_levels: list[Severity]
     categories: dict[str, str]
@@ -268,6 +269,7 @@ class EvalsConfig(_StrictModel):
 class DecisionLogConfig(_StrictModel):
     storage: str
     record_per_run: list[str] = Field(min_length=1)
+    replay: str | None = None
 
 
 class TracingConfig(_StrictModel):
