@@ -5,7 +5,15 @@ from pydantic import ValidationError
 
 from conftest import PASS_RESPONSE, abstain_response, fail_response
 from lazycoder.config.models import ReviewRulesConfig
-from lazycoder.corpus import CorpusHunk, HunkSource, Label, report, score_hunk
+from lazycoder.corpus import (
+    CorpusHunk,
+    CorpusLoadError,
+    HunkSource,
+    Label,
+    load_corpus,
+    report,
+    score_hunk,
+)
 from lazycoder.domain import RuleId, Verdict
 from lazycoder.llm import FakeLLMClient
 from lazycoder.reviewers import SingleRuleReviewer
@@ -151,3 +159,48 @@ def test_abstentions_are_tracked_apart_from_silence(rubric: ReviewRulesConfig) -
     # R16 is medium, so its abstention is neutral: the hatch does not become
     # a second way to withhold approval from code with nothing wrong with it.
     assert result.verdict is Verdict.APPROVE
+
+
+def _line(**overrides: object) -> str:
+    import json
+
+    payload = {
+        "id": "C1",
+        "source": {"repo": "acme/widgets", "pr": 42, "sha": "deadbeef"},
+        "file": "src/total.py",
+        "start_line": 10,
+        "code": INDENTED,
+        "label": "clean",
+        "expect_rules": [],
+    }
+    payload.update(overrides)
+    return json.dumps(payload)
+
+
+def test_load_corpus_refuses_unlabelled_hunks(tmp_path) -> None:
+    # Skipping them would report a number computed over a different set than
+    # the one you think you measured.
+    path = tmp_path / "corpus.jsonl"
+    path.write_text(_line() + "\n" + _line(id="C2", label=None) + "\n")
+
+    with pytest.raises(CorpusLoadError, match="C2.*not labelled"):
+        load_corpus(path)
+
+
+def test_load_corpus_refuses_duplicate_ids(tmp_path) -> None:
+    path = tmp_path / "corpus.jsonl"
+    path.write_text(_line() + "\n" + _line() + "\n")
+
+    with pytest.raises(CorpusLoadError, match="duplicate hunk ids"):
+        load_corpus(path)
+
+
+def test_load_corpus_keeps_code_verbatim_and_skips_blank_lines(tmp_path) -> None:
+    path = tmp_path / "corpus.jsonl"
+    path.write_text("\n" + _line() + "\n\n")
+
+    hunks = load_corpus(path)
+
+    assert len(hunks) == 1
+    assert hunks[0].code == INDENTED
+    assert hunks[0].source.repo == "acme/widgets"

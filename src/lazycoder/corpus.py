@@ -12,11 +12,13 @@ The two labels are not scored the same way, and that asymmetry is the point:
 
 from __future__ import annotations
 
+import json
 from collections import Counter
 from dataclasses import dataclass, field
 from enum import StrEnum
+from pathlib import Path
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from lazycoder.config.models import ReviewRulesConfig
 from lazycoder.domain import CodeBlock, RuleId, Verdict
@@ -63,6 +65,45 @@ class CorpusHunk(BaseModel):
 
     def block(self) -> CodeBlock:
         return CodeBlock(file=self.file, start_line=self.start_line, code=self.code)
+
+
+class CorpusLoadError(Exception):
+    """Raised when a corpus file is malformed or still holds unlabelled hunks."""
+
+
+def load_corpus(path: Path) -> list[CorpusHunk]:
+    """Read a JSONL corpus. Unlabelled candidates are refused, not skipped.
+
+    Scoring against a partly-labelled corpus would silently report a number
+    computed over a different set than the one you think you measured.
+    """
+    hunks: list[CorpusHunk] = []
+    for number, raw in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not raw.strip():
+            continue
+        try:
+            payload = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            msg = f"{path}:{number}: invalid JSON: {exc}"
+            raise CorpusLoadError(msg) from exc
+        if payload.get("label") is None:
+            msg = (
+                f"{path}:{number}: hunk {payload.get('id', '?')!r} is not labelled"
+                " yet — label it clean or defective, or drop the line"
+            )
+            raise CorpusLoadError(msg)
+        try:
+            hunks.append(CorpusHunk.model_validate(payload))
+        except ValidationError as exc:
+            msg = f"{path}:{number}: {exc}"
+            raise CorpusLoadError(msg) from exc
+
+    ids = [hunk.id for hunk in hunks]
+    duplicates = {i for i in ids if ids.count(i) > 1}
+    if duplicates:
+        msg = f"{path}: duplicate hunk ids {sorted(duplicates)}"
+        raise CorpusLoadError(msg)
+    return hunks
 
 
 @dataclass(frozen=True)
