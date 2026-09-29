@@ -15,6 +15,15 @@ Derived from `config/harness.json`. Policy lives in config, not in vibes.
 - Live review / Action dogfood: **at most one** Anthropic key. Never require two keys to run the stack. Never put real keys in git.
 - CI self-review (`.github/workflows/self-review.yml`) uses a **key-gate** job (GitHub forbids `secrets` in `jobs.<id>.if`) so an empty secret skips the review job; keeps `fail-on: never`. Action soft-skips auth/billing/rate-limit as `SKIPPED` (no ERROR sticky) when advisory. `anthropic-api-key` input is `required: false`.
 
+## Learnings (encode + reuse)
+
+See [`LEARNINGS.md`](LEARNINGS.md). Short form:
+
+- **SPEC → PLAN → OK → smallest unit → prove with command → merge → clean tree.**
+- Gate (agent-action-gate) = auth thesis; lazycoder = trailer; LLM ≠ auth engine.
+- Never leave a half PR. Offline proves without keys. No fake precision.
+- Adversarial audit after every "fix"; close gaps with regression fixtures.
+
 ## Hard rules (non-negotiable)
 
 1. Never modify code outside the reviewed diff.
@@ -28,9 +37,9 @@ Derived from `config/harness.json`. Policy lives in config, not in vibes.
 
 1. **Specify** — load diff, harness, guardrails, review_rules; scope the review.
 2. **Plan** — which files/blocks, which subagents; human OK if scope exceeds limits.
-3. **Execute** — run rubric via subagents; findings cite rule_id + location.
-4. **Verify** — real linter/typecheck/test output in sandbox; no self-reported green.
-5. **Decide** — aggregate verdict; human confirms consequential changes.
+3. **Execute (smallest unit)** — one concern; findings cite rule_id + location.
+4. **Prove** — real pytest / lint / mypy / `corpus_cli.py prove` (no-key path); no self-reported green.
+5. **Merge → clean tree** — finish the PR; leave no half-open branch. Verdict for consequential product changes still needs human OK.
 
 ## Build order (inside → out)
 
@@ -65,6 +74,6 @@ mypy src
 
 ## Agent process in this repo
 
-**Plan → you approve → small change → verify (pytest/lint/mypy) → you decide.**
+**SPEC → PLAN → OK → smallest unit → prove (pytest/lint/mypy/prove) → merge → clean tree.**
 
 No 200-line unreviewed dumps. One concern per change.

@@ -9,6 +9,8 @@ Stage 2 corpus.
 key. [agent-action-gate](https://github.com/aisona-lab/agent-action-gate) is the
 auth engine (zero LLM); lazycoder is optional analysis. Never claim two keys.
 
+Process lessons: [`LEARNINGS.md`](../LEARNINGS.md) (SPEC→PLAN→OK→prove→merge; gate=auth, lazycoder=trailer).
+
 ## Deterministic core
 
 | Feature | Unit tests | Fixtures | Notes |
