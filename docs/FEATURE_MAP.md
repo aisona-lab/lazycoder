@@ -66,6 +66,7 @@ lazycoder replay runs.jsonl
 CI:
 - `.github/workflows/test.yml` — `uv sync --extra dev` → `pytest -q` → ruff →
   black → mypy (no Anthropic secret).
-- `.github/workflows/self-review.yml` — dogfood Action; job skipped when
-  `secrets.ANTHROPIC_API_KEY` is empty; `fail-on: never`; auth/billing soft-skip
-  inside the Action. Replay coverage is inside pytest.
+- `.github/workflows/self-review.yml` — dogfood Action; key-gate skips the review
+  job when `ANTHROPIC_API_KEY` is empty (GitHub forbids `secrets` in `jobs.*.if`);
+  `fail-on: never`; auth/billing soft-skip inside the Action. Replay coverage is
+  inside pytest.

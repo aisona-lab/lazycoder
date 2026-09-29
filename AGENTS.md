@@ -13,7 +13,7 @@ Derived from `config/harness.json`. Policy lives in config, not in vibes.
 - **agent-action-gate** is the authorization engine (deterministic allow/deny/approval; zero LLM keys).
 - **lazycoder** is optional LLM analysis for code review. Verdict aggregation + `replay` + corpus `prove` are deterministic and run with **no** `ANTHROPIC_API_KEY`.
 - Live review / Action dogfood: **at most one** Anthropic key. Never require two keys to run the stack. Never put real keys in git.
-- CI self-review (`.github/workflows/self-review.yml`) skips when the secret is absent (`if: secrets.ANTHROPIC_API_KEY != ''`) and keeps `fail-on: never`. Auth/billing soft-skips inside the Action when advisory.
+- CI self-review (`.github/workflows/self-review.yml`) uses a key-gate job (GitHub forbids `secrets` in `jobs.*.if`) so an empty secret skips the review job; keeps `fail-on: never`. Auth/billing soft-skips inside the Action when advisory.
 
 ## Hard rules (non-negotiable)
 
