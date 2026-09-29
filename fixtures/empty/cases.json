@@ -1,0 +1,14 @@
+[
+  {
+    "id": "E1",
+    "name": "empty_list_division",
+    "input_code": "def average(xs):\n    return sum(xs) / len(xs)",
+    "expect_findings": [
+      {
+        "rule_id": "R4",
+        "reason": "empty input raises ZeroDivisionError"
+      }
+    ],
+    "expect_verdict": "BLOCK"
+  }
+]

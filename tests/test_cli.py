@@ -58,3 +58,91 @@ def test_cli_refuses_to_approve_an_empty_diff(
 
     assert exit_code == cli.EXIT_ERROR
     assert "no reviewable hunks" in capsys.readouterr().err
+
+
+def test_cli_replay_matches_recorded_verdict_without_model(
+    rubric: ReviewRulesConfig,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    from datetime import UTC, datetime
+
+    from lazycoder import decision_log
+    from lazycoder.domain import Verdict
+    from lazycoder.orchestrator import review_diff
+    from lazycoder.reviewers import SingleRuleReviewer
+
+    responses = [
+        R7_FINDING_RESPONSE if rule.id == RuleId.R7 else PASS_RESPONSE
+        for rule in rubric.rules
+    ]
+    report = review_diff(
+        SingleRuleReviewer(client=FakeLLMClient(responses=responses)),
+        SQL_INJECTION_DIFF,
+        rubric,
+    )
+    log_file = tmp_path / "decisions.jsonl"
+    decision_log.append(
+        log_file,
+        decision_log.build_record(
+            report=report,
+            diff_text=SQL_INJECTION_DIFF,
+            rubric=rubric,
+            model="fake",
+            started_at=datetime.now(UTC),
+        ),
+    )
+
+    # Replay must not construct an Anthropic client (no model).
+    def _boom() -> None:
+        raise AssertionError("AnthropicClient must not be constructed during replay")
+
+    monkeypatch.setattr(cli, "AnthropicClient", _boom)
+
+    exit_code = cli.main(["replay", str(log_file)])
+
+    out = capsys.readouterr().out
+    assert exit_code == 0
+    assert "verdicts match" in out
+    assert Verdict.BLOCK.value in out
+
+
+def test_cli_replay_reports_drift(
+    rubric: ReviewRulesConfig,
+    capsys: pytest.CaptureFixture[str],
+    tmp_path: Path,
+) -> None:
+    import json
+    from datetime import UTC, datetime
+
+    from lazycoder import decision_log
+    from lazycoder.orchestrator import review_diff
+    from lazycoder.reviewers import SingleRuleReviewer
+
+    responses = [
+        R7_FINDING_RESPONSE if rule.id == RuleId.R7 else PASS_RESPONSE
+        for rule in rubric.rules
+    ]
+    report = review_diff(
+        SingleRuleReviewer(client=FakeLLMClient(responses=responses)),
+        SQL_INJECTION_DIFF,
+        rubric,
+    )
+    record = decision_log.build_record(
+        report=report,
+        diff_text=SQL_INJECTION_DIFF,
+        rubric=rubric,
+        model="fake",
+        started_at=datetime.now(UTC),
+    )
+    # Lie about the recorded verdict so replay must report drift.
+    record["verdict"] = "APPROVE"
+    log_file = tmp_path / "decisions.jsonl"
+    log_file.write_text(json.dumps(record) + "\n", encoding="utf-8")
+
+    exit_code = cli.main(["replay", str(log_file)])
+
+    err = capsys.readouterr().err
+    assert exit_code == 1
+    assert "drifted" in err

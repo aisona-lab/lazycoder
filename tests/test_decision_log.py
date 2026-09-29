@@ -9,8 +9,7 @@ import pytest
 from conftest import PASS_RESPONSE, SQL_INJECTION_CODE, fail_response
 from lazycoder import cli, decision_log
 from lazycoder.config.models import ReviewRulesConfig
-from lazycoder.domain import RuleId, RuleOutcome, Verdict, derive_verdict
-from lazycoder.domain.models import RuleResult
+from lazycoder.domain import RuleId, RuleOutcome, Verdict
 from lazycoder.llm import FakeLLMClient
 from lazycoder.orchestrator import review_diff
 from lazycoder.reviewers import SingleRuleReviewer
@@ -66,12 +65,7 @@ def test_verdict_replays_from_the_record_alone(rubric: ReviewRulesConfig) -> Non
         started_at=datetime.now(UTC),
     )
 
-    replayed = derive_verdict(
-        [RuleResult.model_validate(r) for r in record["report"]["rule_results"]],
-        evaluation_errors=bool(record["report"]["rule_errors"]),
-    )
-
-    assert replayed.value == record["verdict"]
+    assert decision_log.replay_verdict(record) == record["verdict"]
 
 
 def test_rubric_hash_changes_when_the_policy_changes(

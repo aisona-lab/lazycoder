@@ -1,0 +1,76 @@
+[
+  {
+    "id": "E2",
+    "name": "float_money",
+    "input_code": "def total(price, qty):\n    return price * qty  # price is a float",
+    "expect_findings": [
+      {
+        "rule_id": "R3",
+        "reason": "float used for money causes rounding errors"
+      }
+    ],
+    "expect_verdict": "REQUEST_CHANGES"
+  },
+  {
+    "id": "E3",
+    "name": "sql_injection",
+    "input_code": "cursor.execute('SELECT * FROM users WHERE name = ' + name)",
+    "expect_findings": [
+      {
+        "rule_id": "R7",
+        "reason": "string-concatenated SQL is injectable"
+      }
+    ],
+    "expect_verdict": "BLOCK"
+  },
+  {
+    "id": "E4",
+    "name": "list_scan_should_be_set",
+    "input_code": "def seen(item, history):\n    for h in history:\n        if h == item:\n            return True\n    return False",
+    "expect_findings": [
+      {
+        "rule_id": "R1",
+        "reason": "O(n) scan where a set gives O(1)"
+      }
+    ],
+    "expect_verdict": "REQUEST_CHANGES"
+  },
+  {
+    "id": "E7",
+    "name": "correct_looking_but_wrong",
+    "input_code": "def is_even(n):\n    return n % 2 == 1",
+    "expect_findings": [
+      {
+        "rule_id": "R13",
+        "reason": "function named is_even returns True for odd numbers; it solves the wrong problem"
+      }
+    ],
+    "expect_verdict": "REQUEST_CHANGES",
+    "note": "clean and safe but incorrect; must be caught by R13"
+  },
+  {
+    "id": "E9",
+    "name": "unreadable_oneliner",
+    "input_code": "def f(a,b,c): return [x for x in a if x not in b and x in c][0] if any(x in c for x in a) else None",
+    "expect_findings": [
+      {
+        "rule_id": "R15",
+        "reason": "cryptic names and a dense one-liner hide intent; unreadable"
+      }
+    ],
+    "expect_verdict": "REQUEST_CHANGES",
+    "note": "short but not simple; guards R15 vs R8"
+  },
+  {
+    "id": "E11",
+    "name": "race_condition",
+    "input_code": "count = 0\ndef worker():\n    global count\n    count += 1  # called from many threads, no lock",
+    "expect_findings": [
+      {
+        "rule_id": "R17",
+        "reason": "unsynchronized shared-state mutation; read-modify-write race corrupts count"
+      }
+    ],
+    "expect_verdict": "REQUEST_CHANGES"
+  }
+]

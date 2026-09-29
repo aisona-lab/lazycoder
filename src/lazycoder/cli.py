@@ -17,6 +17,7 @@ from lazycoder.reviewers import SingleRuleReviewer
 
 EXIT_CODES = {Verdict.APPROVE: 0, Verdict.REQUEST_CHANGES: 1, Verdict.BLOCK: 2}
 EXIT_ERROR = 3
+EXIT_REPLAY_MISMATCH = 1
 
 
 def _default_config_dir() -> Path:
@@ -48,13 +49,61 @@ def _render(report: ReviewReport) -> str:
     return "\n".join(lines)
 
 
-def main(argv: list[str] | None = None) -> int:
+def _replay_main(argv: list[str]) -> int:
+    """Recompute derive_verdict from a decision log. Never calls the model."""
+    parser = argparse.ArgumentParser(
+        prog="lazycoder replay",
+        description=(
+            "Recompute each recorded verdict from rule_results alone "
+            "(no model call). Exit 0 if every record matches, 1 on drift."
+        ),
+    )
+    parser.add_argument(
+        "log",
+        help="JSONL decision log written by `lazycoder --log PATH`",
+    )
+    args = parser.parse_args(argv)
+
+    path = Path(args.log)
+    try:
+        rows = decision_log.replay_log(path)
+    except OSError as exc:
+        print(f"error: cannot read log: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+    except (ValueError, KeyError, TypeError) as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return EXIT_ERROR
+
+    if not rows:
+        print("error: decision log is empty", file=sys.stderr)
+        return EXIT_ERROR
+
+    mismatches = 0
+    for run_id, recorded, derived, ok in rows:
+        mark = "OK" if ok else "DRIFT"
+        print(f"{mark:5} {run_id}  recorded={recorded}  derived={derived}")
+        if not ok:
+            mismatches += 1
+
+    if mismatches:
+        print(
+            f"error: {mismatches}/{len(rows)} record(s) drifted",
+            file=sys.stderr,
+        )
+        return EXIT_REPLAY_MISMATCH
+    print(f"{len(rows)} record(s) replayed; verdicts match")
+    return 0
+
+
+def _review_main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(
         prog="lazycoder",
         description=(
             "Review a unified diff against the R1..R17 rubric and return"
             " an APPROVE / REQUEST_CHANGES / BLOCK verdict"
             " (exit codes 0 / 1 / 2). Requires ANTHROPIC_API_KEY."
+            " Subcommand: `lazycoder replay LOG` recomputes verdicts"
+            " from a decision log with no model call."
         ),
     )
     parser.add_argument("diff", help="unified diff file, or '-' for stdin")
@@ -116,6 +165,13 @@ def main(argv: list[str] | None = None) -> int:
 
     print(report.model_dump_json(indent=2) if args.json else _render(report))
     return EXIT_CODES[report.verdict]
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if args and args[0] == "replay":
+        return _replay_main(args[1:])
+    return _review_main(args)
 
 
 if __name__ == "__main__":

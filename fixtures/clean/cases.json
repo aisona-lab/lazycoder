@@ -1,0 +1,9 @@
+[
+  {
+    "id": "E5",
+    "name": "clean_code_no_findings",
+    "input_code": "def clamp(x: int, lo: int, hi: int) -> int:\n    return max(lo, min(x, hi))",
+    "expect_findings": [],
+    "expect_verdict": "APPROVE"
+  }
+]
