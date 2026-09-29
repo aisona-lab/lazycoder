@@ -84,12 +84,17 @@ tuned. Opt in with `fail-on: request-changes` once you have looked at what it
 reports on your own repo; the roadmap's next step is publishing the number that
 justifies flipping the default back.
 
-Missing key skips with a warning (never red). When `fail-on: never`, Anthropic
-**auth / empty-credits / billing** errors soft-skip with a warning instead of
-failing the check; other operational errors (network, crash) still fail.
-This repo's `.github/workflows/self-review.yml` uses a key-gate job so an empty
-`ANTHROPIC_API_KEY` secret skips the review job (not a red check). Cost note: one
-model call per rubric rule per diff hunk (17 × hunks).
+`anthropic-api-key` is optional (`required: false`). Missing key skips with a
+warning (never red). When `fail-on: never`, Anthropic **auth / empty-credits /
+billing** (and rate-limit / overloaded) errors soft-skip as verdict `SKIPPED`
+before any sticky comment — no ERROR comment, check stays green. Other
+operational errors (network, crash) still fail.
+
+Self-review CI (`.github/workflows/self-review.yml`) uses a **key-gate** job:
+GitHub forbids `secrets` in `jobs.<id>.if`, so a tiny gate job exports
+`has_key` and the review job runs only when that output is true. Empty secret
+→ review job skipped (not a red check). Cost note: one model call per rubric
+rule per diff hunk (17 × hunks).
 
 Versioning is two-axis: the moving `@v1` tag tracks the action wrapper; the
 engine defaults to the latest PyPI release and can be pinned via `version`.
