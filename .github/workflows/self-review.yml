@@ -1,17 +1,42 @@
 name: self-review
 
-on: pull_request
+# Dogfood the Action on this repo's PRs.
+# GitHub does not allow `secrets` in jobs.<id>.if (only github/needs/vars/inputs),
+# so we use a key-gate job: missing/empty ANTHROPIC_API_KEY skips the review job
+# without failing the check. Keep fail-on: never (advisory). Billing/auth soft-exit
+# is handled inside action.yml when fail-on=never — empty credits must not red CI.
+# Do not put real keys in git; set the secret in repo Settings -> Secrets.
+on:
+  pull_request:
 
 permissions:
   contents: read
   pull-requests: write
 
 jobs:
+  key-gate:
+    runs-on: ubuntu-latest
+    outputs:
+      has_key: ${{ steps.check.outputs.has_key }}
+    steps:
+      - id: check
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -n "$KEY" ]; then
+            echo "has_key=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has_key=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::self-review skipped — ANTHROPIC_API_KEY secret empty/absent"
+          fi
+
   lazycoder:
+    needs: key-gate
+    if: needs.key-gate.outputs.has_key == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          fail-on: never # advisory while dogfooding
+          fail-on: never

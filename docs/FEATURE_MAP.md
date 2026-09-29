@@ -4,6 +4,11 @@ Maps lazycoder surfaces to unit tests, eval fixture packs, and decision-log
 replay. Harness-only: does not change rubric taste, Action `fail-on`, or the
 Stage 2 corpus.
 
+**Keys:** deterministic core + corpus prove + replay need **no**
+`ANTHROPIC_API_KEY`. Live review / Action dogfood use **at most one** Anthropic
+key. [agent-action-gate](https://github.com/aisona-lab/agent-action-gate) is the
+auth engine (zero LLM); lazycoder is optional analysis. Never claim two keys.
+
 ## Deterministic core
 
 | Feature | Unit tests | Fixtures | Notes |
@@ -45,16 +50,23 @@ from a second embedded copy.
 | Refuse APPROVE on empty diff | `test_cli.py` | Exit 3 |
 | `--log` writes one record | `test_decision_log.py` | |
 | `lazycoder replay LOG` | `test_cli.py` | No Anthropic client constructed |
-| GitHub Action wrapper | — | `action.yml`; advisory `fail-on: never` |
+| GitHub Action wrapper | — | `action.yml`; advisory `fail-on: never`; missing key → SKIPPED; auth/billing soft-skip when `fail-on=never` |
 
 ## How to run
 
 ```bash
 uv sync --extra dev
-pytest -q
+# No-key path (must exit 0 without ANTHROPIC_API_KEY):
+env -u ANTHROPIC_API_KEY uv run pytest -q
+env -u ANTHROPIC_API_KEY uv run python scripts/corpus_cli.py prove corpus/seed.jsonl
 # optional: recompute verdicts from a prior --log file (no API key)
 lazycoder replay runs.jsonl
 ```
 
-CI (`.github/workflows/test.yml`): `uv sync --extra dev` → `pytest -q` → ruff →
-black → mypy. Replay coverage is inside pytest; no separate workflow step.
+CI:
+- `.github/workflows/test.yml` — `uv sync --extra dev` → `pytest -q` → ruff →
+  black → mypy (no Anthropic secret).
+- `.github/workflows/self-review.yml` — dogfood Action; key-gate skips the review
+  job when `ANTHROPIC_API_KEY` is empty (GitHub forbids `secrets` in `jobs.*.if`);
+  `fail-on: never`; auth/billing soft-skip inside the Action. Replay coverage is
+  inside pytest.
