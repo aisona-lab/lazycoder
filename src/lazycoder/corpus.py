@@ -21,7 +21,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from lazycoder.config.models import ReviewRulesConfig
-from lazycoder.domain import CodeBlock, RuleId, Verdict
+from lazycoder.domain import CodeBlock, RuleId, Severity, Verdict
 from lazycoder.reviewers import SingleRuleReviewer
 
 
@@ -249,3 +249,130 @@ def report(results: list[HunkResult], rubric: ReviewRulesConfig) -> CorpusReport
         missed=sum(missed.values()),
         per_rule=per_rule,
     )
+
+
+# ---------------------------------------------------------------------------
+# Stage 2 pre-registered cull thresholds (docs/hardening-plan.md, 2026-08-26).
+# Encoded here so the cull is a measurement against fixed numbers, not taste.
+# ---------------------------------------------------------------------------
+
+MIN_CLEAN_HUNKS = 20
+MIN_DEFECTIVE_HUNKS = 15
+
+# Per-rule cull
+DELETE_NOISE_RATE = 0.25  # and caught == 0 → delete
+DEMOTE_HIGH_NOISE_RATE = 0.10  # and severity high → demote to medium
+STAGE3A_ABSTENTION_RATE = 0.50  # and clean_noise < 10% → keep, route to 3a
+STAGE3A_MAX_NOISE_RATE = 0.10
+
+# Action fail-on gate (do not flip fail-on away from never until both hold)
+FAIL_ON_MIN_QUIET_RATE = 0.80
+FAIL_ON_MAX_HIGH_NOISE_RATE = 0.05
+
+
+class CullAction(StrEnum):
+    """What the pre-registered thresholds say to do with one rule."""
+
+    DELETE = "delete"
+    DEMOTE = "demote"
+    KEEP_STAGE_3A = "keep_stage_3a"
+    KEEP = "keep"
+
+
+@dataclass(frozen=True)
+class CorpusShape:
+    clean: int
+    defective: int
+
+    @property
+    def ok(self) -> bool:
+        return self.clean >= MIN_CLEAN_HUNKS and self.defective >= MIN_DEFECTIVE_HUNKS
+
+    @property
+    def summary(self) -> str:
+        return (
+            f"{self.clean} clean (≥{MIN_CLEAN_HUNKS}), "
+            f"{self.defective} defective (≥{MIN_DEFECTIVE_HUNKS})"
+            + (" — shape OK" if self.ok else " — shape SHORT")
+        )
+
+
+def corpus_shape(hunks: list[CorpusHunk]) -> CorpusShape:
+    return CorpusShape(
+        clean=sum(1 for h in hunks if h.label is Label.CLEAN),
+        defective=sum(1 for h in hunks if h.label is Label.DEFECTIVE),
+    )
+
+
+def decide_cull(verdict: RuleVerdict, severity: Severity) -> CullAction:
+    """Apply the Stage 2 pre-registered decision table to one rule's numbers.
+
+    Order matches the table in docs/hardening-plan.md: delete first, then
+    demote, then route-to-3a, else keep. Changing a threshold requires a
+    commit that says so — do not tweak while staring at live results.
+    """
+    if verdict.clean_noise_rate > DELETE_NOISE_RATE and verdict.caught == 0:
+        return CullAction.DELETE
+    if verdict.clean_noise_rate > DEMOTE_HIGH_NOISE_RATE and severity is Severity.HIGH:
+        return CullAction.DEMOTE
+    if (
+        verdict.abstention_rate > STAGE3A_ABSTENTION_RATE
+        and verdict.clean_noise_rate < STAGE3A_MAX_NOISE_RATE
+    ):
+        return CullAction.KEEP_STAGE_3A
+    return CullAction.KEEP
+
+
+@dataclass(frozen=True)
+class FailOnGate:
+    """Whether metrics justify flipping Action fail-on off `never`."""
+
+    quiet_rate: float
+    high_rules_over_noise_cap: tuple[RuleId, ...]
+    ready: bool
+    reason: str
+
+
+def fail_on_gate(summary: CorpusReport, rubric: ReviewRulesConfig) -> FailOnGate:
+    """Gate from the hardening plan: quiet_rate ≥ 80% and no high rule > 5% noise."""
+    high_noisy = tuple(
+        rule.id
+        for rule in rubric.rules
+        if rule.severity_if_unjustified is Severity.HIGH
+        and summary.per_rule[rule.id].clean_noise_rate > FAIL_ON_MAX_HIGH_NOISE_RATE
+    )
+    quiet_ok = summary.quiet_rate >= FAIL_ON_MIN_QUIET_RATE
+    ready = quiet_ok and not high_noisy
+    if ready:
+        reason = (
+            f"quiet_rate {summary.quiet_rate:.0%} ≥ {FAIL_ON_MIN_QUIET_RATE:.0%} "
+            f"and no high rule above {FAIL_ON_MAX_HIGH_NOISE_RATE:.0%} clean noise"
+        )
+    else:
+        parts: list[str] = []
+        if not quiet_ok:
+            parts.append(
+                f"quiet_rate {summary.quiet_rate:.0%} < {FAIL_ON_MIN_QUIET_RATE:.0%}"
+            )
+        if high_noisy:
+            parts.append(
+                "high-noise "
+                + ",".join(r.value for r in high_noisy)
+                + f" > {FAIL_ON_MAX_HIGH_NOISE_RATE:.0%}"
+            )
+        reason = "; ".join(parts)
+    return FailOnGate(
+        quiet_rate=summary.quiet_rate,
+        high_rules_over_noise_cap=high_noisy,
+        ready=ready,
+        reason=reason,
+    )
+
+
+def cull_plan(
+    summary: CorpusReport, rubric: ReviewRulesConfig
+) -> dict[RuleId, CullAction]:
+    return {
+        rule.id: decide_cull(summary.per_rule[rule.id], rule.severity_if_unjustified)
+        for rule in rubric.rules
+    }

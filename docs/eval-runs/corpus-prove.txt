@@ -1,0 +1,19 @@
+lazycoder Stage 2 — corpus prove (offline)
+date: 2026-09-29 14:25 CEST (PT)
+corpus: corpus/seed.jsonl
+
+Pre-registered thresholds (hardening-plan.md, 2026-08-26):
+  delete if clean_noise > 25% and caught == 0
+  demote if clean_noise > 10% and severity high
+  stage3a if abstention > 50% and clean_noise < 10%
+  fail-on ready if quiet_rate ≥ 80% and no high rule > 5% clean noise
+  shape: ≥20 clean, ≥15 defective
+
+shape: 22 clean (≥20), 15 defective (≥15) — shape OK
+repos: encode/httpx, pallets/click, psf/requests, urllib3/urllib3
+hunks: 37
+cull self-check: PASS (6/6 decision-table cases)
+live scoring: BLOCKED — ANTHROPIC_API_KEY unset (no credits/key in this environment; offline half only)
+fail-on: stays never until live corpus metrics satisfy the gate (no live scores in this prove run — gate not claimed ready)
+
+OFFLINE_PROVE: PASS  LIVE_SCORING: BLOCKED  FAIL_ON: never

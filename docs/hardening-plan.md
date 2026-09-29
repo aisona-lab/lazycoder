@@ -52,6 +52,13 @@ decision log fully determine the verdict.
 
 ## Stage 2 — the number
 
+**Phase 3 (offline) landed:** `corpus/seed.jsonl` meets the shape floor
+(≥20 clean / ≥15 defective); `decide_cull` / `fail_on_gate` encode the
+pre-registered thresholds; `scripts/corpus_cli.py prove` is the offline
+proof. Live `run` + rule cull from real scores remain gated on Anthropic
+credits — do not invent precision numbers and do not flip `fail-on`.
+
+
 Corpus of 30–50 hunks from merged OSS PRs: half with a defect the follow-up fix
 confirms, half genuinely clean. Not toy snippets.
 

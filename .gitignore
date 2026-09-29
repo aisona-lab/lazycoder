@@ -14,3 +14,7 @@ logs/
 .DS_Store
 CLAUDE.md
 .claude/
+
+# Stage 2 harvest scratch (labelled seed is committed)
+corpus/candidates.jsonl
+corpus/defective_seed.jsonl
