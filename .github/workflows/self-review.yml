@@ -1,10 +1,11 @@
 name: self-review
 
 # Dogfood the Action on this repo's PRs.
-# GitHub does not allow `secrets` in jobs.<id>.if (only github/needs/vars/inputs),
-# so we use a key-gate job: missing/empty ANTHROPIC_API_KEY skips the review job
-# without failing the check. Keep fail-on: never (advisory). Billing/auth soft-exit
-# is handled inside action.yml when fail-on=never — empty credits must not red CI.
+# Key-gate: GitHub forbids `secrets` in jobs.<id>.if (only github/needs/vars/inputs),
+# so a gate job exports has_key and the review job runs only when true. Do not put
+# secrets in job if:. Missing/empty ANTHROPIC_API_KEY skips the review job without
+# failing the check. Keep fail-on: never (advisory). action.yml soft-skips
+# auth/billing as SKIPPED before any ERROR sticky — empty credits must not red CI.
 # Do not put real keys in git; set the secret in repo Settings -> Secrets.
 on:
   pull_request:

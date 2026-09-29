@@ -50,7 +50,7 @@ from a second embedded copy.
 | Refuse APPROVE on empty diff | `test_cli.py` | Exit 3 |
 | `--log` writes one record | `test_decision_log.py` | |
 | `lazycoder replay LOG` | `test_cli.py` | No Anthropic client constructed |
-| GitHub Action wrapper | — | `action.yml`; advisory `fail-on: never`; missing key → SKIPPED; auth/billing soft-skip when `fail-on=never` |
+| GitHub Action wrapper | `test_soft_skip.py` | `action.yml`; advisory `fail-on: never`; missing key → SKIPPED; auth/billing soft-skip **before** ERROR sticky (`scripts/soft_skip.py`) |
 
 ## How to run
 
@@ -66,7 +66,8 @@ lazycoder replay runs.jsonl
 CI:
 - `.github/workflows/test.yml` — `uv sync --extra dev` → `pytest -q` → ruff →
   black → mypy (no Anthropic secret).
-- `.github/workflows/self-review.yml` — dogfood Action; key-gate skips the review
-  job when `ANTHROPIC_API_KEY` is empty (GitHub forbids `secrets` in `jobs.*.if`);
-  `fail-on: never`; auth/billing soft-skip inside the Action. Replay coverage is
+- `.github/workflows/self-review.yml` — dogfood Action; **key-gate** job exports
+  `has_key` (GitHub forbids `secrets` in `jobs.<id>.if` — do not put secrets in
+  job `if:`); empty secret skips the review job. `fail-on: never`; auth/billing
+  soft-skip as `SKIPPED` before any ERROR sticky. Replay + soft-skip coverage
   inside pytest.

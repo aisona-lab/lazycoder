@@ -9,9 +9,10 @@ branding:
 inputs:
   anthropic-api-key:
     description: >-
-      Anthropic API key. Missing/empty skips the review with a warning (never
-      fails the check). With fail-on=never, auth/billing errors also soft-skip.
-    required: true
+      Anthropic API key (optional). Missing/empty skips the review with a
+      warning (never fails the check). With fail-on=never, auth/billing (and
+      rate-limit/overloaded) errors soft-skip as SKIPPED — no ERROR sticky.
+    required: false
   model:
     description: Model override (LAZYCODER_MODEL)
     default: ""
@@ -84,6 +85,16 @@ runs:
         code=$?
         set -e
         echo "exit_code=$code" >> "$GITHUB_OUTPUT"
+        # Classify auth/billing BEFORE the comment step. Soft-skip → SKIPPED
+        # so the ERROR sticky never posts; gate then exits 0.
+        if [ "$code" -ge 3 ] && [ "${{ inputs.fail-on }}" = "never" ] && \
+           python3 "${{ github.action_path }}/scripts/soft_skip.py" \
+             "$RUNNER_TEMP/stderr.txt"; then
+          echo "::warning::lazycoder soft-skipped — Anthropic auth/billing error (fail-on=never); not failing the check"
+          echo "verdict=SKIPPED" >> "$GITHUB_OUTPUT"
+          echo "lazycoder verdict: SKIPPED (exit $code, soft-skip)"
+          exit 0
+        fi
         case $code in
           0) verdict=APPROVE ;;
           1) verdict=REQUEST_CHANGES ;;
@@ -124,12 +135,16 @@ runs:
       shell: bash
       run: |
         code="${{ steps.review.outputs.exit_code }}"
+        verdict="${{ steps.review.outputs.verdict }}"
+        if [ "$verdict" = "SKIPPED" ]; then
+          exit 0
+        fi
         if [ "$code" -ge 3 ]; then
           cat "$RUNNER_TEMP/stderr.txt" >&2 || true
-          err=$(cat "$RUNNER_TEMP/stderr.txt" 2>/dev/null || true)
-          # Auth / empty-credits must not fail the PR check when advisory.
+          # Defense in depth: same classifier as the review step.
           if [ "${{ inputs.fail-on }}" = "never" ] && \
-             echo "$err" | grep -qiE 'credit balance|billing|authentication|unauthorized|invalid.?api.?key|api.?key.*(invalid|missing)|401|403'; then
+             python3 "${{ github.action_path }}/scripts/soft_skip.py" \
+               "$RUNNER_TEMP/stderr.txt"; then
             echo "::warning::lazycoder soft-skipped — Anthropic auth/billing error (fail-on=never); not failing the check"
             exit 0
           fi
