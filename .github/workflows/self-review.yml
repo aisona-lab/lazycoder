@@ -1,5 +1,10 @@
 name: self-review
 
+# Dogfood the Action on this repo's PRs.
+# Skip entirely when ANTHROPIC_API_KEY is unset/empty so missing-secret never
+# fails the PR check. Keep fail-on: never (advisory). Billing/auth soft-exit is
+# handled inside action.yml when fail-on=never — empty credits must not red CI.
+# Do not put real keys in git; set the secret in repo Settings → Secrets.
 on: pull_request
 
 permissions:
@@ -8,10 +13,11 @@ permissions:
 
 jobs:
   lazycoder:
+    if: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: ./
         with:
           anthropic-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
-          fail-on: never # advisory while dogfooding
+          fail-on: never # advisory while dogfooding; never block merges on review taste

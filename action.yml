@@ -8,7 +8,9 @@ branding:
 
 inputs:
   anthropic-api-key:
-    description: Anthropic API key (missing key skips the review with a warning, never fails fork PRs)
+    description: >-
+      Anthropic API key. Missing/empty skips the review with a warning (never
+      fails the check). With fail-on=never, auth/billing errors also soft-skip.
     required: true
   model:
     description: Model override (LAZYCODER_MODEL)
@@ -124,6 +126,13 @@ runs:
         code="${{ steps.review.outputs.exit_code }}"
         if [ "$code" -ge 3 ]; then
           cat "$RUNNER_TEMP/stderr.txt" >&2 || true
+          err=$(cat "$RUNNER_TEMP/stderr.txt" 2>/dev/null || true)
+          # Auth / empty-credits must not fail the PR check when advisory.
+          if [ "${{ inputs.fail-on }}" = "never" ] && \
+             echo "$err" | grep -qiE 'credit balance|billing|authentication|unauthorized|invalid.?api.?key|api.?key.*(invalid|missing)|401|403'; then
+            echo "::warning::lazycoder soft-skipped — Anthropic auth/billing error (fail-on=never); not failing the check"
+            exit 0
+          fi
           echo "::error::lazycoder operational error (exit $code)"
           exit 1
         fi

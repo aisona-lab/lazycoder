@@ -13,16 +13,25 @@ every rule has a recorded pass/fail.
 lazycoder is the **trailer** — a working code-review agent that shows the
 harness pattern (rubric, evals, decision log, replay) on a concrete product.
 [agent-action-gate](https://github.com/aisona-lab/agent-action-gate) is the
-**thesis** — a deterministic allow / deny / approval gate for agent tool calls,
-with no LLM in the authorization path. They share harness ideas (feature map,
-fixture packs, eval runner); lazycoder does **not** depend on the gate.
+**thesis / auth engine** — a deterministic allow / deny / approval gate for
+agent tool calls, with **no LLM in the authorization path** and **zero API
+keys** to run. They share harness ideas (feature map, fixture packs, eval
+runner); lazycoder does **not** depend on the gate, and the gate does not
+depend on lazycoder.
+
+**One key or no key — never two.** The deterministic half (pytest, corpus
+prove, `lazycoder replay`, verdict aggregation) runs with **no**
+`ANTHROPIC_API_KEY`. Live review / Action dogfood optionally uses **one**
+Anthropic key. Do not claim the stack needs two keys; authorization lives in
+the gate, not in an LLM.
 
 ## Install
 
 ```bash
-export ANTHROPIC_API_KEY=sk-ant-...
+# Live review needs ONE Anthropic key. Offline paths need none.
+export ANTHROPIC_API_KEY=sk-ant-...   # optional — omit for pytest / prove / replay
 
-uvx lazycoder my.diff              # zero-install run
+uvx lazycoder my.diff              # zero-install run (needs key)
 pipx install lazycoder             # or install the CLI permanently
 
 git diff main | uvx lazycoder -    # review your branch straight from a pipe
@@ -32,7 +41,9 @@ Exit codes map the verdict — `0` APPROVE, `1` REQUEST_CHANGES, `2` BLOCK — s
 drops into CI as a gate with no glue code. `--json` emits the full report;
 `--log runs.jsonl` appends one append-only decision record per run.
 `lazycoder replay runs.jsonl` recomputes each recorded verdict from
-`rule_results` alone — no model call — and exits non-zero on drift.
+`rule_results` alone — no model call, no key — and exits non-zero on drift.
+Offline corpus proof likewise needs no key:
+`uv run python scripts/corpus_cli.py prove corpus/seed.jsonl`.
 
 ## GitHub Action
 
@@ -60,7 +71,7 @@ to `fail-on`.
 
 | Input | Default | Meaning |
 |---|---|---|
-| `anthropic-api-key` | — | Required. Missing (fork PRs) skips with a warning, never a red check |
+| `anthropic-api-key` | — | Optional for the check to stay green. Missing (fork PRs / empty secret) skips with a warning, never a red check |
 | `fail-on` | `never` | `block` \| `request-changes` \| `never` — which verdicts fail the check. Advisory by default: see below |
 | `comment` | `true` | Post/update the sticky PR comment |
 | `version` | latest | Pin the lazycoder engine (PyPI version) independently of the action tag |
@@ -73,8 +84,12 @@ tuned. Opt in with `fail-on: request-changes` once you have looked at what it
 reports on your own repo; the roadmap's next step is publishing the number that
 justifies flipping the default back.
 
-Operational errors (bad key, network) always fail the check regardless of
-`fail-on`. Cost note: one model call per rubric rule per diff hunk (17 × hunks).
+Missing key skips with a warning (never red). When `fail-on: never`, Anthropic
+**auth / empty-credits / billing** errors soft-skip with a warning instead of
+failing the check; other operational errors (network, crash) still fail.
+This repo's `.github/workflows/self-review.yml` also skips the whole job when
+`secrets.ANTHROPIC_API_KEY` is empty. Cost note: one model call per rubric rule
+per diff hunk (17 × hunks).
 
 Versioning is two-axis: the moving `@v1` tag tracks the action wrapper; the
 engine defaults to the latest PyPI release and can be pinned via `version`.
