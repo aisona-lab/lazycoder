@@ -1,0 +1,26 @@
+[
+  {
+    "id": "E8",
+    "name": "no_tests_for_risky_code",
+    "input_code": "def parse_amount(s):\n    return Decimal(s)  # no tests; bad input raises, unhandled",
+    "expect_findings": [
+      {
+        "rule_id": "R14",
+        "reason": "no tests cover invalid or empty input on a parsing boundary"
+      }
+    ],
+    "expect_verdict": "REQUEST_CHANGES"
+  },
+  {
+    "id": "E10",
+    "name": "breaking_api_change",
+    "input_code": "# existing: def get_user(id)\ndef get_user(id, region):  # new required arg\n    ...",
+    "expect_findings": [
+      {
+        "rule_id": "R16",
+        "reason": "new required parameter breaks existing callers of get_user"
+      }
+    ],
+    "expect_verdict": "REQUEST_CHANGES"
+  }
+]

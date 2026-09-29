@@ -67,3 +67,62 @@ def test_unknown_extra_field_fails_loudly(tmp_path: Path) -> None:
 
     with pytest.raises(ConfigLoadError, match="typo_field|extra"):
         load_config_file(bad, GuardrailsConfig)
+
+
+def test_evals_load_cases_from_fixture_packs() -> None:
+    app = load_all_configs(CONFIG_DIR)
+    ids = {case.id for case in app.evals.cases}
+    assert ids == {
+        "E1",
+        "E2",
+        "E3",
+        "E4",
+        "E5",
+        "E6",
+        "E7",
+        "E8",
+        "E9",
+        "E10",
+        "E11",
+        "E12",
+        "E13",
+    }
+    assert set(app.evals.fixture_packs) == {
+        "clean",
+        "deny",
+        "empty",
+        "malicious",
+        "boundary",
+    }
+    # Thin wrapper: case bodies must not be duplicated in evals.json.
+    raw = json.loads((CONFIG_DIR / "evals.json").read_text(encoding="utf-8"))
+    assert "cases" not in raw
+    assert "fixture_packs" in raw
+
+
+def test_embedded_cases_in_evals_json_are_rejected(tmp_path: Path) -> None:
+    """Dual-source drift guard: cases belong in fixtures/, not evals.json."""
+    import shutil
+
+    from lazycoder.config.loader import load_evals
+
+    config_dir = tmp_path / "config"
+    config_dir.mkdir()
+    for name in CONFIG_FILES:
+        shutil.copy(CONFIG_DIR / name, config_dir / name)
+    shutil.copytree(REPO_ROOT / "fixtures", tmp_path / "fixtures")
+
+    payload = json.loads((config_dir / "evals.json").read_text(encoding="utf-8"))
+    payload["cases"] = [
+        {
+            "id": "E99",
+            "name": "embedded",
+            "input_code": "x = 1",
+            "expect_findings": [],
+            "expect_verdict": "APPROVE",
+        }
+    ]
+    (config_dir / "evals.json").write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(ConfigLoadError, match="dual-source|must not be embedded"):
+        load_evals(config_dir)

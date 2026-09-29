@@ -15,7 +15,7 @@
       "findings_with_rule_ids",
       "final_verdict"
     ],
-    "replay": "the verdict is a pure function of rule_results and the rubric, so derive_verdict recomputes it from the record with no model call"
+    "replay": "`lazycoder replay LOG` recomputes derive_verdict from each JSONL record with no model call; exit non-zero on drift"
   },
   "tracing": {
     "trace_each_subagent_step": true,

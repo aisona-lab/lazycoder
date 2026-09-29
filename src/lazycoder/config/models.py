@@ -257,9 +257,15 @@ class EvalScoring(_StrictModel):
 
 
 class EvalsConfig(_StrictModel):
+    """Eval suite metadata.
+
+    Case bodies live under fixtures/; the loader fills `cases`.
+    """
+
     description: str
     principle: str
-    cases: list[EvalCase] = Field(min_length=1)
+    fixture_packs: list[str] = Field(min_length=1)
+    cases: list[EvalCase] = Field(default_factory=list)
     scoring: EvalScoring
 
 

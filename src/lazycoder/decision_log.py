@@ -9,7 +9,8 @@ from typing import Any
 
 from lazycoder import __version__
 from lazycoder.config.models import ReviewRulesConfig
-from lazycoder.domain import ReviewReport
+from lazycoder.domain import ReviewReport, derive_verdict
+from lazycoder.domain.models import RuleResult
 
 
 def _sha256(text: str) -> str:
@@ -54,3 +55,38 @@ def append(path: Path, record: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(record, sort_keys=True) + "\n")
+
+
+def replay_verdict(record: dict[str, Any]) -> str:
+    """Recompute the verdict from a decision-log record. No model call.
+
+    Returns the derived verdict value. Caller compares it to record["verdict"].
+    """
+    report = record["report"]
+    results = [RuleResult.model_validate(r) for r in report["rule_results"]]
+    return derive_verdict(
+        results, evaluation_errors=bool(report.get("rule_errors"))
+    ).value
+
+
+def replay_log(path: Path) -> list[tuple[str, str, str, bool]]:
+    """Replay every JSONL record. Returns (run_id, recorded, derived, ok) rows."""
+    rows: list[tuple[str, str, str, bool]] = []
+    for line_no, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        if not line.strip():
+            continue
+        try:
+            record = json.loads(line)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"{path}:{line_no}: invalid JSON ({exc.msg})") from exc
+        recorded = record["verdict"]
+        derived = replay_verdict(record)
+        rows.append(
+            (
+                record.get("run_id", f"line-{line_no}"),
+                recorded,
+                derived,
+                derived == recorded,
+            )
+        )
+    return rows

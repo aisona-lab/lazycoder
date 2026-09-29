@@ -8,6 +8,15 @@ Code gets written fast. The bottleneck is trusting it. lazycoder is the reviewer
 that never gets tired, never skips a rule, and refuses to say APPROVE unless
 every rule has a recorded pass/fail.
 
+## Sibling: agent-action-gate
+
+lazycoder is the **trailer** — a working code-review agent that shows the
+harness pattern (rubric, evals, decision log, replay) on a concrete product.
+[agent-action-gate](https://github.com/aisona-lab/agent-action-gate) is the
+**thesis** — a deterministic allow / deny / approval gate for agent tool calls,
+with no LLM in the authorization path. They share harness ideas (feature map,
+fixture packs, eval runner); lazycoder does **not** depend on the gate.
+
 ## Install
 
 ```bash
@@ -22,6 +31,8 @@ git diff main | uvx lazycoder -    # review your branch straight from a pipe
 Exit codes map the verdict — `0` APPROVE, `1` REQUEST_CHANGES, `2` BLOCK — so it
 drops into CI as a gate with no glue code. `--json` emits the full report;
 `--log runs.jsonl` appends one append-only decision record per run.
+`lazycoder replay runs.jsonl` recomputes each recorded verdict from
+`rule_results` alone — no model call — and exits non-zero on drift.
 
 ## GitHub Action
 
@@ -116,7 +127,7 @@ failed evaluation, never recorded as a finding.
 
 ## Measured
 
-First full run of `config/evals.json` against the live model
+First full run of the eval suite (`fixtures/` via `config/evals.json`) against the live model
 (`claude-opus-5`, rubric `9441b948`, raw output in
 [`docs/eval-runs/`](docs/eval-runs/)):
 
@@ -196,9 +207,11 @@ lazycoder/
 │   ├── task_loop.json            # orchestrator + review subagents, isolation, aggregation
 │   ├── review_rules.json         # R1..R17 — the interrogation rubric (the core)
 │   ├── production_readiness.json # the release gate
-│   ├── evals.json                # known-flawed/clean cases that test the reviewer
+│   ├── evals.json                # thin wrapper: fixture_packs + scoring (no case bodies)
 │   └── observability.json        # append-only decision log, tracing, redaction
-├── src/lazycoder/                    # domain, config loader, reviewers, llm client
+├── fixtures/{clean,deny,empty,malicious,boundary}/  # eval case bodies (source of truth)
+├── docs/FEATURE_MAP.md           # feature → tests / fixtures / replay coverage
+├── src/lazycoder/                # domain, config loader, reviewers, llm client
 └── tests/                        # unit + integration + eval coverage
 ```
 
@@ -258,13 +271,15 @@ that make the review logic trustworthy.
 - **TDD throughout.** Every behavior went RED before GREEN — including the
   garbage-input fixtures that hardened the parser.
 
-- **The eval is the product.** `config/evals.json` is a set of known-flawed and
-  known-clean cases whose job is to measure *the reviewer itself*. Wired as a CI
-  gate, it closes the loop: a code reviewer that has its own reviewer, and knows
-  whether it's still good every time it changes. A case now fails when a rule
-  fires that should not have — in an automated reviewer the false positive, not
-  the miss, is what gets the tool switched off, so it is the number that has to
-  be measured. `summarize()` reports precision, recall, and abstention per rule.
+- **The eval is the product.** Known-flawed and known-clean cases live under
+  `fixtures/` (clean / deny / empty / malicious / boundary); `config/evals.json`
+  only lists the packs and scoring rules so the suite cannot drift from a second
+  copy. Wired as a CI gate, it closes the loop: a code reviewer that has its own
+  reviewer, and knows whether it's still good every time it changes. A case now
+  fails when a rule fires that should not have — in an automated reviewer the
+  false positive, not the miss, is what gets the tool switched off, so it is the
+  number that has to be measured. `summarize()` reports precision, recall, and
+  abstention per rule. Coverage map: [`docs/FEATURE_MAP.md`](docs/FEATURE_MAP.md).
 
 ## Develop
 
@@ -273,9 +288,13 @@ uv sync --extra dev
 pre-commit install
 
 pytest -q                       # deterministic suite — no network, no key
+lazycoder replay runs.jsonl     # recompute verdicts from a --log file; no model
 ruff check . && black --check .
 mypy src
 ```
+
+Feature → test / fixture / replay coverage:
+[`docs/FEATURE_MAP.md`](docs/FEATURE_MAP.md).
 
 To run the live-API suite (opt-in, never part of `pytest -q`):
 
@@ -311,8 +330,9 @@ pytest -m integration
    marked inside it, so the system-level rules (state, compatibility,
    concurrency) become answerable instead of abstaining. Cheaper too: a 40-hunk
    PR is ~8 files.
-10. **`replay`** — reconstruct the deterministic half from the decision log and
-    assert the verdict has not drifted. SARIF output for code scanning.
+10. ~~**`replay`** — reconstruct the deterministic half from the decision log and
+    assert the verdict has not drifted (`lazycoder replay LOG`).~~ ✓
+    SARIF output for code scanning remains open.
 11. **Sandboxed check execution** — run the diff's own linters/typecheck/tests
     in an isolated sandbox so "green" is observed, not self-reported. Until this
     lands, lazycoder judges the code as data and never executes it.

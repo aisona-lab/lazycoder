@@ -34,6 +34,7 @@ packages = ["src/lazycoder"]
 
 [tool.hatch.build.targets.wheel.force-include]
 "config" = "lazycoder/config_defaults"
+"fixtures" = "lazycoder/fixtures"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
