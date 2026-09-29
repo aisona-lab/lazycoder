@@ -321,11 +321,12 @@ pytest -m integration
    in the wheel, releases via trusted publishing on `v*` tags.~~ ✓
 7. ~~**GitHub Action** wrapping the CLI, so `uses: aisona-lab/lazycoder` gates a
    PR with the same rubric and exit codes.~~ ✓
-8. **A real corpus** — 30–50 hunks from merged OSS PRs, half with a defect the
-   follow-up fix confirms, half genuinely clean. Harvester and scoring are
-   built (`scripts/corpus_cli.py`); the cull thresholds are pre-registered in
-   [`docs/hardening-plan.md`](docs/hardening-plan.md) so the result is a
-   measurement rather than a rationalisation. What remains is labelling.
+8. **A real corpus** — labelled seed in `corpus/seed.jsonl` (22 clean / 15
+   defective from merged OSS PRs) meets the Stage 2 shape floor. Cull
+   thresholds are executable (`decide_cull` / `fail_on_gate`); offline proof:
+   `python scripts/corpus_cli.py prove corpus/seed.jsonl`. **Live** scoring
+   (`corpus_cli.py run`) still needs Anthropic credits; Action `fail-on`
+   stays `never` until the fail-on gate is ready.
 9. **File-level context** — review the whole post-change file with the diff
    marked inside it, so the system-level rules (state, compatibility,
    concurrency) become answerable instead of abstaining. Cheaper too: a 40-hunk

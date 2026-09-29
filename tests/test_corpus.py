@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 from pydantic import ValidationError
 
@@ -204,3 +206,92 @@ def test_load_corpus_keeps_code_verbatim_and_skips_blank_lines(tmp_path) -> None
     assert len(hunks) == 1
     assert hunks[0].code == INDENTED
     assert hunks[0].source.repo == "acme/widgets"
+
+
+def test_decide_cull_matches_preregistered_table() -> None:
+    from lazycoder.corpus import CullAction, RuleVerdict, decide_cull
+    from lazycoder.domain import Severity
+
+    # delete: interrupts constantly, never been right
+    assert (
+        decide_cull(RuleVerdict(RuleId.R12, 20, 6, 0, 0, 0, 0, 20), Severity.MEDIUM)
+        is CullAction.DELETE
+    )
+    # demote: high severity whose noise must not block
+    assert (
+        decide_cull(RuleVerdict(RuleId.R4, 20, 3, 1, 0, 0, 0, 20), Severity.HIGH)
+        is CullAction.DEMOTE
+    )
+    # stage 3a: silent is not the same failure as noisy
+    assert (
+        decide_cull(RuleVerdict(RuleId.R14, 20, 1, 0, 0, 0, 12, 20), Severity.MEDIUM)
+        is CullAction.KEEP_STAGE_3A
+    )
+    # keep
+    assert (
+        decide_cull(RuleVerdict(RuleId.R7, 20, 2, 3, 1, 0, 2, 20), Severity.HIGH)
+        is CullAction.KEEP
+    )
+    # delete wins over demote when caught == 0
+    assert (
+        decide_cull(RuleVerdict(RuleId.R4, 20, 6, 0, 0, 0, 0, 20), Severity.HIGH)
+        is CullAction.DELETE
+    )
+
+
+def test_fail_on_gate_requires_quiet_rate_and_calm_high_rules(
+    rubric: ReviewRulesConfig,
+) -> None:
+    from lazycoder.corpus import (
+        HunkResult,
+        Label,
+        fail_on_gate,
+        report,
+    )
+
+    # Three quiet clean hunks → quiet_rate 100%, no high noise → ready
+    quiet = HunkResult(
+        "C1",
+        Label.CLEAN,
+        frozenset(),
+        frozenset(),
+        frozenset(),
+        Verdict.APPROVE,
+        frozenset(),
+    )
+    summary = report([quiet, quiet, quiet], rubric)
+    gate = fail_on_gate(summary, rubric)
+    assert gate.ready is True
+
+    # One high-severity finding on clean collapses the gate
+    noisy = HunkResult(
+        "C2",
+        Label.CLEAN,
+        frozenset(),
+        frozenset({RuleId.R4}),
+        frozenset(),
+        Verdict.BLOCK,
+        frozenset(),
+    )
+    summary = report([quiet, quiet, noisy], rubric)
+    gate = fail_on_gate(summary, rubric)
+    assert gate.ready is False
+    assert RuleId.R4 in gate.high_rules_over_noise_cap
+
+
+def test_corpus_shape_targets_stage2_minimums(tmp_path) -> None:
+    from lazycoder.corpus import (
+        MIN_CLEAN_HUNKS,
+        MIN_DEFECTIVE_HUNKS,
+        corpus_shape,
+        load_corpus,
+    )
+
+    # The committed seed must meet the pre-registered shape, or prove fails.
+    seed = Path(__file__).resolve().parent.parent / "corpus" / "seed.jsonl"
+    if not seed.exists():
+        pytest.skip("corpus/seed.jsonl not present")
+    shape = corpus_shape(load_corpus(seed))
+    assert shape.clean >= MIN_CLEAN_HUNKS
+    assert shape.defective >= MIN_DEFECTIVE_HUNKS
+    assert shape.ok is True
