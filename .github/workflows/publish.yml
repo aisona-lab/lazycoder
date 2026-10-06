@@ -12,7 +12,7 @@ jobs:
       id-token: write # OIDC for PyPI trusted publishing
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       - name: Gate — deterministic suite must be green
         run: |
           uv sync --extra dev
