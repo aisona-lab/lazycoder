@@ -130,7 +130,9 @@ instead of 17).
 | `security` | R7 | Cheapest pass; most catches in Stage 1 (3 true, 1 false) |
 
 `focused` and `security` come from 13 toy cases, not the Stage 2 corpus. They
-are a starting point for cutting noise, not a calibrated gate.
+are a starting point for cutting noise, not a calibrated gate. On the corpus,
+8 of the 15 labelled defects are R4 and `focused` does not ask R4, so it
+cannot catch most of them by construction.
 
 ## GitHub Action
 
@@ -234,9 +236,51 @@ failed evaluation, never recorded as a finding.
 
 ## Measured
 
-First full run of the eval suite (`fixtures/` via `config/evals.json`) against the live model
-(`claude-opus-5`, rubric `9441b948`, raw output in
-[`docs/eval-runs/`](docs/eval-runs/)):
+Two measurements, both bad, both published. Neither justifies a blocking gate,
+so the Action ships advisory (`fail-on: never`).
+
+### Real code: the Stage 2 corpus
+
+37 hunks from merged OSS PRs (requests, httpx, urllib3, click): 22 clean, 15
+with a defect a later commit fixed. Scored keyless through agent mode, with
+Claude Code subagents as the reviewer, all 17 rules
+([run 1](docs/eval-runs/2026-10-23-agent-mode-corpus.txt),
+[run 2](docs/eval-runs/2026-10-23-agent-mode-corpus-run2.txt)):
+
+| | run 1 | run 2 |
+|---|---|---|
+| clean hunks left alone (quiet rate) | 100% | 86% |
+| findings per clean hunk | 0.00 | 0.14 |
+| defective hunks flagged under any rule (hunk recall, gated) | 1 / 15 | 3 / 15 |
+| defective hunks flagged under the labelled rule (rule recall) | 0 / 15 | 0 / 15 |
+| fail-on gate | not ready | not ready |
+
+The only difference between the runs is one sentence in the reviewer's prompt
+("only fail when the code shows the problem"), which moved noise but not
+detection. Read by hand, run 2 correctly described 2 of the 8 labelled fixes
+(the httpx `verify=False` + `cert=` early return, the requests header-regex
+`$` that accepts a trailing newline), both under rules other than the label's.
+
+What that says, as far as 37 hunks can:
+
+- **On real code the reviewer is quiet, not noisy** — the opposite of the toy
+  suite below. Its problem here is that it misses most defects.
+- **Most defects are not visible in a hunk.** R13 abstains on 41% of hunks and
+  R14 on 78%; IPv6 parsing or gzip trailing bytes need the file around them.
+  That is the case for file-level context (roadmap 9).
+- **The rules overlap.** The same bug fits R4, R7, R12 or R13, which is why the
+  gate counts hunk recall and not rule recall
+  ([pre-registered](docs/hardening-plan.md) before the next run).
+
+Caveats, also in the artifacts: isolation was by instruction, not sandbox;
+the corpus is small and its clean labels are provisional; the reviewer was an
+agent, not the API path.
+
+### Toy cases: the eval suite
+
+First full run of `fixtures/` via `config/evals.json` against the live API
+(`claude-opus-5`, rubric `9441b948`,
+[raw output](docs/eval-runs/2026-08-26-claude-opus-5.txt)):
 
 | | |
 |---|---|
@@ -244,12 +288,8 @@ First full run of the eval suite (`fixtures/` via `config/evals.json`) against t
 | precision | **0.17** — 11 true findings, 53 false |
 | recall | **0.92** — 11 of 12 expected findings caught |
 
-The reviewer catches nearly everything it should and leaves roughly four
-spurious findings per case. In an automated reviewer that ratio is the whole
-ballgame: a miss costs you one bug, a false positive costs you the user's
-attention, and attention is what gets the tool switched off.
-
-Worst offenders, per rule:
+On these hand-written snippets the reviewer catches nearly everything and
+leaves about four spurious findings per case:
 
 | Rule | true | false | Reading |
 |---|---|---|---|
@@ -259,14 +299,9 @@ Worst offenders, per rule:
 | R11 monolith vs services | 0 | 0 | Abstains 92% of the time; never contributes |
 | R6, R10 | 0 | 0 | Never fire, never abstain usefully |
 
-Eight of seventeen rules produced no true positive at all. The ones that earn
-their place: R7 (0.75), R1 and R17 (1.00), R14 and R16 (0.50).
-
-This is published rather than fixed first on purpose. The next milestone is a
-real corpus and a rule cull driven by these numbers, not by taste — and the
-GitHub Action ships advisory (`fail-on: never`) until the number justifies a
-gate. A rubric of seventeen rules is a coverage claim; the number above is what
-it is actually worth today.
+Thirteen toy cases told one story (too noisy) and 37 real hunks tell another
+(too blind). That gap is the argument for measuring on real code before
+cutting any rule.
 
 ## Status
 
@@ -429,9 +464,8 @@ pytest -m integration
 4. ~~Wire the real Anthropic client behind the same `LLMClient` protocol, with an
    opt-in integration suite (`pytest -m integration`). First live run: the model
    caught eval E3's SQL injection (R7 → BLOCK).~~ ✓
-5. **Run the full evals.json set against the live model** and track precision,
-   recall and abstention over time — the eval stops measuring the plumbing and
-   starts measuring the reviewer.
+5. ~~**Run the full evals.json set against the live model** and track precision,
+   recall and abstention.~~ ✓ Stage 1, see [Measured](#measured).
 6. ~~Distribution: published to [PyPI](https://pypi.org/project/lazycoder/) with
    a `lazycoder` console entry point (`uvx lazycoder my.diff`), rubric bundled
    in the wheel, releases via trusted publishing on `v*` tags.~~ ✓
@@ -442,9 +476,11 @@ pytest -m integration
    thresholds are executable (`decide_cull` / `fail_on_gate`); offline proof:
    `python scripts/corpus_cli.py prove corpus/seed.jsonl`. Live scoring runs
    on the API (`corpus_cli.py run`, needs credits) or keyless through your
-   own agent (`lazycoder check --corpus`). Action `fail-on` stays `never`
-   until the fail-on gate is ready.
-9. **File-level context** — review the whole post-change file with the diff
+   own agent (`lazycoder check --corpus`). Two agent-mode runs are in
+   [Measured](#measured): quiet, but hunk recall 1–3 / 15. Action `fail-on`
+   stays `never` until the fail-on gate is ready.
+9. **File-level context — next.** The corpus runs say most defects are not
+   visible from the hunk alone. Review the whole post-change file with the diff
    marked inside it, so the system-level rules (state, compatibility,
    concurrency) become answerable instead of abstaining. Cheaper too: a 40-hunk
    PR is ~8 files.
@@ -453,8 +489,8 @@ pytest -m integration
     SARIF output for code scanning remains open.
 11. ~~**Agent mode** — `packet` / `check` / `init`: the user's coding agent
     answers, lazycoder validates and decides; no API key. Presets
-    (`full` / `focused` / `security`).~~ ✓ Next: measure agent-mode precision
-    on the Stage 2 corpus, not only the toy fixtures.
+    (`full` / `focused` / `security`), canaries, secret redaction, scope
+    limits.~~ ✓
 12. **Sandboxed check execution** — run the diff's own linters/typecheck/tests
     in an isolated sandbox so "green" is observed, not self-reported. Until this
     lands, lazycoder judges the code as data and never executes it.
