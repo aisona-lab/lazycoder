@@ -32,6 +32,7 @@ def build_record(
     started_at: datetime,
     finished_at: datetime | None = None,
     preset: str | None = None,
+    canaries: dict[str, int] | None = None,
 ) -> dict[str, Any]:
     """One append-only record with everything the verdict was derived from.
 
@@ -51,6 +52,8 @@ def build_record(
     }
     if preset is not None:
         record["preset"] = preset
+    if canaries is not None:
+        record["canaries"] = canaries
     return record
 
 

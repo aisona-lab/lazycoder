@@ -242,7 +242,16 @@ def test_cli_packet_then_check_without_a_key(
 
     assert (
         cli.main(
-            ["packet", str(diff), "--preset", "security", "--out", str(packet_path)]
+            [
+                "packet",
+                str(diff),
+                "--preset",
+                "security",
+                "--canaries",
+                "0",
+                "--out",
+                str(packet_path),
+            ]
         )
         == 0
     )
@@ -272,6 +281,8 @@ def test_cli_packet_then_check_without_a_key(
             str(answers),
             "--preset",
             "security",
+            "--canaries",
+            "0",
             "--agent",
             "test-agent",
             "--log",

@@ -10,15 +10,28 @@ import anthropic
 
 from lazycoder import decision_log, scaffold
 from lazycoder.agent_mode import (
+    CANARY_PACKS,
     AgentAnswersError,
+    Canary,
     build_packet,
-    check_answers,
+    canary_seed,
     check_blocks,
+    check_with_canaries,
+    plant_canaries,
 )
 from lazycoder.config import AppConfig, apply_preset, load_all_configs, load_presets
 from lazycoder.config.exceptions import ConfigLoadError
+from lazycoder.config.loader import load_fixture_cases
 from lazycoder.config.models import ReviewRulesConfig
-from lazycoder.domain import ReviewReport, Verdict
+from lazycoder.corpus import (
+    CorpusLoadError,
+    format_corpus_summary,
+    format_result_line,
+    load_corpus,
+    score_report,
+)
+from lazycoder.corpus import report as corpus_report
+from lazycoder.domain import CodeBlock, ReviewReport, Verdict
 from lazycoder.evals import (
     case_block,
     format_case_line,
@@ -48,13 +61,52 @@ def _default_config_dir() -> Path:
 
 def _load(
     config_arg: str | None, preset: str | None
-) -> tuple[AppConfig, ReviewRulesConfig, str]:
-    """All configs, plus the rubric narrowed to the chosen preset and its name."""
+) -> tuple[AppConfig, ReviewRulesConfig, str, Path]:
+    """All configs, the rubric narrowed to the chosen preset, its name, the dir."""
     config_dir = Path(config_arg) if config_arg else _default_config_dir()
     app = load_all_configs(config_dir)
     presets = load_presets(config_dir)
     name = preset or presets.default
-    return app, apply_preset(app.review_rules, presets, name), name
+    return app, apply_preset(app.review_rules, presets, name), name, config_dir
+
+
+def _add_source_args(parser: argparse.ArgumentParser, diff_help: str) -> None:
+    parser.add_argument("diff", nargs="?", help=diff_help)
+    parser.add_argument(
+        "--evals", action="store_true", help="the bundled eval fixtures"
+    )
+    parser.add_argument(
+        "--corpus", help="a labelled corpus JSONL (e.g. corpus/seed.jsonl)"
+    )
+    parser.add_argument(
+        "--canaries",
+        type=int,
+        default=1,
+        help="known-defect blocks planted among a diff's hunks (default 1;"
+        " packet and check must agree; 0 disables)",
+    )
+
+
+def _one_source(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
+    if sum([bool(args.diff), args.evals, bool(args.corpus)]) != 1:
+        parser.error("give exactly one of: a diff, --evals, --corpus")
+
+
+def _diff_with_canaries(
+    diff_text: str,
+    rubric: ReviewRulesConfig,
+    preset: str,
+    config_dir: Path,
+    count: int,
+) -> tuple[list[CodeBlock], list[Canary]]:
+    """The diff's hunks with the canaries packet and check both derive."""
+    return plant_canaries(
+        parse_diff(diff_text),
+        load_fixture_cases(config_dir, CANARY_PACKS),
+        rubric,
+        count=count,
+        seed=canary_seed(diff_text, preset),
+    )
 
 
 def _read_diff(arg: str) -> str:
@@ -172,7 +224,7 @@ def _review_main(argv: list[str]) -> int:
 
     started_at = datetime.now(UTC)
     try:
-        _, rubric, preset = _load(args.config, args.preset)
+        _, rubric, preset, _ = _load(args.config, args.preset)
         client = AnthropicClient()
         report = review_diff(SingleRuleReviewer(client=client), diff_text, rubric)
     except (
@@ -213,32 +265,33 @@ def _packet_main(argv: list[str]) -> int:
         description=(
             "Emit every (hunk, rule) question as JSON for your own coding"
             " agent to answer. No API key. Answer it, then run"
-            " `lazycoder check`."
+            " `lazycoder check` with the same source, preset and canaries."
         ),
     )
-    parser.add_argument("diff", nargs="?", help="unified diff file, or '-'")
-    parser.add_argument(
-        "--evals", action="store_true", help="packet the bundled eval fixtures"
-    )
+    _add_source_args(parser, "unified diff file, or '-'")
     _add_rubric_args(parser)
     parser.add_argument("--out", help="write the packet here instead of stdout")
     args = parser.parse_args(argv)
-    if args.evals == bool(args.diff):
-        parser.error("give a diff or --evals (exactly one)")
+    _one_source(parser, args)
 
     try:
-        app, rubric, preset = _load(args.config, args.preset)
+        app, rubric, preset, config_dir = _load(args.config, args.preset)
         if args.evals:
             blocks = [case_block(case) for case in app.evals.cases]
+        elif args.corpus:
+            blocks = [hunk.block() for hunk in load_corpus(Path(args.corpus))]
         else:
-            blocks = parse_diff(_read_diff(args.diff))
-    except (ConfigLoadError, OSError) as exc:
+            blocks, _ = _diff_with_canaries(
+                _read_diff(args.diff), rubric, preset, config_dir, args.canaries
+            )
+    except (ConfigLoadError, CorpusLoadError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
     if not blocks:
         print("error: no reviewable hunks found in the diff", file=sys.stderr)
         return EXIT_ERROR
 
+    # Only file, line and code leave the corpus: no ids, labels or PR links.
     packet = build_packet(blocks, rubric, preset=preset)
     text = json.dumps(packet, indent=2)
     if args.out:
@@ -251,6 +304,13 @@ def _packet_main(argv: list[str]) -> int:
         )
     else:
         print(text)
+    if args.corpus:
+        print(
+            f"warning: the labels are in {args.corpus}. Answer the packet from an"
+            " agent that cannot read it (a copy of the packet outside the repo),"
+            " or the number measures nothing.",
+            file=sys.stderr,
+        )
     return 0
 
 
@@ -261,14 +321,11 @@ def _check_main(argv: list[str]) -> int:
         description=(
             "Hold your agent's answers to the reviewer contract and derive the"
             " verdict from the rubric (exit 0 / 1 / 2; 3 if the answers do"
-            " not match the packet). With --evals, score them instead."
+            " not match the packet). With --evals or --corpus, score them."
         ),
     )
-    parser.add_argument("diff", nargs="?", help="the diff the packet was built from")
+    _add_source_args(parser, "the diff the packet was built from")
     parser.add_argument("--answers", required=True, help='JSON {"answers": [...]}')
-    parser.add_argument(
-        "--evals", action="store_true", help="score answers to `packet --evals`"
-    )
     _add_rubric_args(parser)
     parser.add_argument("--json", action="store_true", help="emit the full report")
     parser.add_argument("--log", help="append one decision record to this file")
@@ -276,12 +333,11 @@ def _check_main(argv: list[str]) -> int:
         "--agent", default="unknown", help="who answered, for the decision log"
     )
     args = parser.parse_args(argv)
-    if args.evals == bool(args.diff):
-        parser.error("give a diff or --evals (exactly one)")
+    _one_source(parser, args)
 
     started_at = datetime.now(UTC)
     try:
-        app, rubric, preset = _load(args.config, args.preset)
+        app, rubric, preset, config_dir = _load(args.config, args.preset)
         payload = json.loads(Path(args.answers).read_text(encoding="utf-8"))
         if args.evals:
             cases = app.evals.cases
@@ -294,13 +350,31 @@ def _check_main(argv: list[str]) -> int:
                 print(format_case_line(result))
             print("\n".join(format_summary(summarize(results, rubric))))
             return 0
+        if args.corpus:
+            hunks = load_corpus(Path(args.corpus))
+            reports = check_blocks([h.block() for h in hunks], rubric, payload)
+            scored = [
+                score_report(hunk, report, rubric)
+                for hunk, report in zip(hunks, reports, strict=True)
+            ]
+            for hunk_result in scored:
+                print(format_result_line(hunk_result))
+            summary = corpus_report(scored, rubric)
+            print("\n".join(format_corpus_summary(summary, rubric)))
+            print(
+                f"\nmeasured: agent:{args.agent}, preset {preset}. This scores that"
+                " agent as a reviewer, not the API path."
+            )
+            return 0
         diff_text = _read_diff(args.diff)
-        blocks = parse_diff(diff_text)
+        blocks, canaries = _diff_with_canaries(
+            diff_text, rubric, preset, config_dir, args.canaries
+        )
         if not blocks:
             print("error: no reviewable hunks found in the diff", file=sys.stderr)
             return EXIT_ERROR
-        report = check_answers(blocks, rubric, payload)
-    except (ConfigLoadError, OSError, AgentAnswersError) as exc:
+        report, outcome = check_with_canaries(blocks, canaries, rubric, payload)
+    except (ConfigLoadError, CorpusLoadError, OSError, AgentAnswersError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
     except json.JSONDecodeError as exc:
@@ -317,9 +391,15 @@ def _check_main(argv: list[str]) -> int:
                 model=f"agent:{args.agent}",
                 started_at=started_at,
                 preset=preset,
+                canaries={"planted": outcome.planted, "caught": outcome.caught},
             ),
         )
-    print(report.model_dump_json(indent=2) if args.json else _render(report))
+    if args.json:
+        print(report.model_dump_json(indent=2))
+    else:
+        print(_render(report))
+        if outcome.planted:
+            print(f"canaries: {outcome.caught}/{outcome.planted} caught")
     return EXIT_CODES[report.verdict]
 
 
@@ -353,7 +433,7 @@ def _init_main(argv: list[str]) -> int:
 
     try:
         # Validates the preset name now, not when the agent first runs it.
-        _, _, preset = _load(args.config, args.preset)
+        _, _, preset, _ = _load(args.config, args.preset)
         written = scaffold.write_skill(
             Path(args.root),
             preset=preset,
