@@ -248,15 +248,16 @@ so the Action ships advisory (`fail-on: never`).
 with a defect a later commit fixed. Scored keyless through agent mode, with
 Claude Code subagents as the reviewer, all 17 rules
 ([run 1](docs/eval-runs/2026-10-23-agent-mode-corpus.txt),
-[run 2](docs/eval-runs/2026-10-23-agent-mode-corpus-run2.txt)):
+[run 2](docs/eval-runs/2026-10-23-agent-mode-corpus-run2.txt),
+[run 3](docs/eval-runs/2026-10-23-agent-mode-corpus-run3-context.txt)):
 
-| | run 1 | run 2 |
-|---|---|---|
-| clean hunks left alone (quiet rate) | 100% | 86% |
-| findings per clean hunk | 0.00 | 0.14 |
-| defective hunks flagged under any rule (hunk recall, gated) | 1 / 15 | 3 / 15 |
-| defective hunks flagged under the labelled rule (rule recall) | 0 / 15 | 0 / 15 |
-| fail-on gate | not ready | not ready |
+| | run 1 | run 2 | run 3 (+ file context) |
+|---|---|---|---|
+| clean hunks left alone (quiet rate) | 100% | 86% | 91% |
+| findings per clean hunk | 0.00 | 0.14 | 0.14 |
+| defective hunks flagged under any rule (hunk recall, gated) | 1 / 15 | 3 / 15 | 5 / 15 |
+| defective hunks flagged under the labelled rule (rule recall) | 0 / 15 | 0 / 15 | 1 / 15 |
+| fail-on gate | not ready | not ready | not ready |
 
 The only difference between the runs is one sentence in the reviewer's prompt
 ("only fail when the code shows the problem"), which moved noise but not
@@ -269,8 +270,10 @@ What that says, as far as 37 hunks can:
 - **On real code the reviewer is quiet, not noisy** — the opposite of the toy
   suite below. Its problem here is that it misses most defects.
 - **Most defects are not visible in a hunk.** R13 abstains on 41% of hunks and
-  R14 on 78%; IPv6 parsing or gzip trailing bytes need the file around them.
-  That is the case for file-level context (roadmap 9).
+  R14 on 78%. Run 3 shows each hunk inside its file (±120 lines): R13
+  abstention drops to 11%, hunk recall goes 3 → 5 / 15, noise stays flat.
+  By the rule [pre-registered](docs/hardening-plan.md) before the run, 5 / 15
+  is **inconclusive**: `--context` stays opt-in until a larger corpus decides.
 - **The rules overlap.** The same bug fits R4, R7, R12 or R13, which is why the
   gate counts hunk recall and not rule recall
   ([pre-registered](docs/hardening-plan.md) before the next run).

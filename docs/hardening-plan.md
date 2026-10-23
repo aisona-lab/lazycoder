@@ -204,6 +204,15 @@ Decision rule for whether context earns its cost:
 Abstention on R13 / R14 is reported against run 2 (41% / 78%) as a
 secondary read, not a criterion.
 
+**Run 3 result
+([`docs/eval-runs/2026-10-23-agent-mode-corpus-run3-context.txt`](eval-runs/2026-10-23-agent-mode-corpus-run3-context.txt)):
+hunk recall 5/15, quiet rate 91% → INCONCLUSIVE** by the rule above.
+Context stays opt-in; the next step is a larger corpus, not a decision. The
+secondary read moved the way the stage predicted: R13 abstention 41% → 11%,
+R14 78% → 62%, with noise flat (0.14 per clean hunk). By hand, 3 of 8
+labelled fixes were described (run 2: 2), including the first labelled-rule
+hit in three runs (urllib3-5255, R4).
+
 ## Stage 3b — repo context (deferred)
 
 Caller retrieval via ripgrep, plus project conventions from `CLAUDE.md` /
