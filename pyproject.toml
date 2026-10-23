@@ -1,6 +1,6 @@
 [project]
 name = "lazycoder"
-version = "0.2.0"
+version = "0.3.0"
 description = "Code review agent with senior-level judgement: interrogates every diff hunk against a fixed rubric and returns APPROVE / REQUEST_CHANGES / BLOCK"
 readme = "README.md"
 license = "MIT"
