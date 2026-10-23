@@ -1,0 +1,20 @@
+{
+  "description": "Named rule subsets of review_rules.json. A preset only selects rules; severities, the verdict policy and the untrusted-data framing stay exactly as the rubric defines them. Pick one with --preset on review, packet, check and init.",
+  "default": "full",
+  "presets": {
+    "full": {
+      "description": "All seventeen rules. The coverage claim; also the noisiest (Stage 1: precision 0.17 on the toy suite).",
+      "rules": "all"
+    },
+    "focused": {
+      "description": "The five rules the hardening plan marks Keep: at least one true positive and precision >= 0.5 in the Stage 1 live run (R1, R7, R14, R16, R17). Measured on 13 toy cases, not the Stage 2 corpus: a starting point, not a calibrated gate.",
+      "rules": ["R1", "R7", "R14", "R16", "R17"],
+      "evidence": "docs/eval-runs/2026-08-26-claude-opus-5.txt"
+    },
+    "security": {
+      "description": "R7 only: validation, secrets, injection. Cheapest pass, and the one rule that caught the most in Stage 1 (3 true, 1 false).",
+      "rules": ["R7"],
+      "evidence": "docs/eval-runs/2026-08-26-claude-opus-5.txt"
+    }
+  }
+}

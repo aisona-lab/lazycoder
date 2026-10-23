@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from lazycoder.domain.enums import RuleId, Severity, Verdict
 
@@ -296,6 +296,41 @@ class ObservabilityConfig(_StrictModel):
     tracing: TracingConfig
     logging: LoggingConfig
     metrics: list[str] = Field(min_length=1)
+
+
+# --- presets.json ---
+
+
+class Preset(_StrictModel):
+    """A named subset of the rubric. Selects rules; never changes severities."""
+
+    description: str
+    rules: Literal["all"] | list[RuleId]
+    evidence: str | None = None
+
+    @model_validator(mode="after")
+    def rules_not_empty_or_duplicated(self) -> Preset:
+        if isinstance(self.rules, list):
+            if not self.rules:
+                msg = 'a preset must select at least one rule (or "all")'
+                raise ValueError(msg)
+            if len(set(self.rules)) != len(self.rules):
+                msg = "a preset must not list a rule twice"
+                raise ValueError(msg)
+        return self
+
+
+class PresetsConfig(_StrictModel):
+    description: str
+    default: str
+    presets: dict[str, Preset] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def default_exists(self) -> PresetsConfig:
+        if self.default not in self.presets:
+            msg = f"default preset {self.default!r} is not defined"
+            raise ValueError(msg)
+        return self
 
 
 # --- aggregate ---

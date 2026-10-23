@@ -45,6 +45,61 @@ drops into CI as a gate with no glue code. `--json` emits the full report;
 Offline corpus proof likewise needs no key:
 `uv run python scripts/corpus_cli.py prove corpus/seed.jsonl`.
 
+## Agent mode — no API key
+
+Already paying for a coding agent (Claude Code, Cursor, Codex)? Use it as the
+model and lazycoder as the harness. Your agent answers the questions; lazycoder
+owns everything that has to be deterministic: which questions get asked, the
+untrusted-data framing, citation anchoring, coverage, severity and the verdict.
+
+```bash
+uvx lazycoder init --preset focused   # writes .claude/skills/lazycoder-review/SKILL.md
+# then ask your agent: "run the lazycoder-review skill"
+```
+
+The skill drives two keyless commands, which you can also run by hand:
+
+```bash
+lazycoder packet my.diff --preset focused --out packet.json   # every (hunk, rule) question, code fenced as data
+# ...your agent writes answers.json: {"answers": [{"block_id", "rule_id", "outcome", "line", "reason"}]}
+lazycoder check my.diff --answers answers.json --preset focused --log runs.jsonl   # exit 0 / 1 / 2
+```
+
+`check` holds the agent's answers to the same contract as the live API path:
+a skipped or duplicated (hunk, rule) pair is an evaluation error and can never
+APPROVE; a citation outside the hunk is rejected; severity, verdict and any
+other field the agent adds are ignored, because the rubric decides those.
+Answers written for another diff or preset are refused (exit 3) — block ids are
+content hashes. The decision log records `model: agent:<name>` and replays like
+any other run.
+
+What it cannot do: verify that the agent actually thought about each pair. A
+model that answers `pass` to everything gets APPROVE on clean-looking code, and
+an agent reviewing its own change is the weakest reviewer there is. The skill
+tells it to review from a fresh subagent; measure yours before trusting it:
+
+```bash
+lazycoder packet --evals --preset focused --out evals-packet.json
+# ...agent answers it...
+lazycoder check --evals --answers evals-answers.json --preset focused   # precision / recall / abstention per rule
+```
+
+### Presets
+
+`config/presets.json` names rule subsets. A preset only chooses which rules are
+asked; severities and the verdict policy are the rubric's, untouched. Works on
+the API path too (`lazycoder my.diff --preset security` makes 1 call per hunk
+instead of 17).
+
+| Preset | Rules | Why |
+|---|---|---|
+| `full` (default) | R1–R17 | The coverage claim. Stage 1 precision 0.17 |
+| `focused` | R1, R7, R14, R16, R17 | The hardening plan's *Keep* list: ≥1 true positive and precision ≥ 0.5 in Stage 1 |
+| `security` | R7 | Cheapest pass; most catches in Stage 1 (3 true, 1 false) |
+
+`focused` and `security` come from 13 toy cases, not the Stage 2 corpus. They
+are a starting point for cutting noise, not a calibrated gate.
+
 ## GitHub Action
 
 Gate every PR with the same rubric — one step, no glue code:
@@ -354,7 +409,11 @@ pytest -m integration
 10. ~~**`replay`** — reconstruct the deterministic half from the decision log and
     assert the verdict has not drifted (`lazycoder replay LOG`).~~ ✓
     SARIF output for code scanning remains open.
-11. **Sandboxed check execution** — run the diff's own linters/typecheck/tests
+11. ~~**Agent mode** — `packet` / `check` / `init`: the user's coding agent
+    answers, lazycoder validates and decides; no API key. Presets
+    (`full` / `focused` / `security`).~~ ✓ Next: measure agent-mode precision
+    on the Stage 2 corpus, not only the toy fixtures.
+12. **Sandboxed check execution** — run the diff's own linters/typecheck/tests
     in an isolated sandbox so "green" is observed, not self-reported. Until this
     lands, lazycoder judges the code as data and never executes it.
 

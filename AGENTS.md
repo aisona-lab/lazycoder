@@ -63,6 +63,10 @@ env -u ANTHROPIC_API_KEY uv run python scripts/corpus_cli.py prove corpus/seed.j
 ruff check . && black --check .
 mypy src
 # Replay needs a prior --log file; covered inside pytest without a key.
+# Agent mode (no key): the user's agent is the model, lazycoder the harness.
+uv run lazycoder packet my.diff --preset focused --out packet.json
+uv run lazycoder check my.diff --answers answers.json --preset focused
+uv run lazycoder init --preset focused   # scaffold the agent skill into a repo
 ```
 
 ## Definition of done

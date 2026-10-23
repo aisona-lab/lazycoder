@@ -13,6 +13,8 @@ from lazycoder.config.models import (
     GuardrailsConfig,
     HarnessConfig,
     ObservabilityConfig,
+    Preset,
+    PresetsConfig,
     ProductionReadinessConfig,
     ReviewRulesConfig,
     SetupConfig,
@@ -114,6 +116,52 @@ def load_evals(config_dir: Path) -> EvalsConfig:
         )
     return evals.model_copy(
         update={"cases": load_fixture_cases(config_dir, evals.fixture_packs)}
+    )
+
+
+def load_presets(config_dir: Path) -> PresetsConfig:
+    """Load presets.json. Optional: a config dir without it offers only "full".
+
+    Kept out of CONFIG_FILES so an ejected or older config directory keeps
+    loading; presets are a convenience over the rubric, never a requirement.
+    """
+    path = config_dir / "presets.json"
+    if not path.is_file():
+        return PresetsConfig(
+            description="built-in fallback: presets.json is absent",
+            default="full",
+            presets={"full": Preset(description="every rule", rules="all")},
+        )
+    return load_config_file(path, PresetsConfig)
+
+
+def apply_preset(
+    rubric: ReviewRulesConfig, presets: PresetsConfig, name: str | None
+) -> ReviewRulesConfig:
+    """The rubric narrowed to a preset's rules, in rubric order.
+
+    Severities are copied untouched, so the verdict policy cannot drift by
+    picking a preset; only which questions get asked changes.
+    """
+    chosen = name or presets.default
+    preset = presets.presets.get(chosen)
+    if preset is None:
+        known = ", ".join(sorted(presets.presets))
+        raise ConfigLoadError(
+            Path("presets.json"), f"unknown preset {chosen!r} (known: {known})"
+        )
+    if preset.rules == "all":
+        return rubric
+    wanted = set(preset.rules)
+    missing = wanted - {rule.id for rule in rubric.rules}
+    if missing:
+        names = ", ".join(sorted(rule_id.value for rule_id in missing))
+        raise ConfigLoadError(
+            Path("presets.json"),
+            f"preset {chosen!r} selects rules absent from the rubric: {names}",
+        )
+    return rubric.model_copy(
+        update={"rules": [rule for rule in rubric.rules if rule.id in wanted]}
     )
 
 
