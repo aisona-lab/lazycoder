@@ -31,13 +31,14 @@ def build_record(
     model: str,
     started_at: datetime,
     finished_at: datetime | None = None,
+    preset: str | None = None,
 ) -> dict[str, Any]:
     """One append-only record with everything the verdict was derived from.
 
     The verdict is a pure function of rule_results plus the rubric, and both
     are in here, so a replay can recompute it and prove it did not drift.
     """
-    return {
+    record: dict[str, Any] = {
         "run_id": str(uuid.uuid4()),
         "engine_version": __version__,
         "model": model,
@@ -48,6 +49,9 @@ def build_record(
         "verdict": report.verdict.value,
         "report": report.model_dump(mode="json"),
     }
+    if preset is not None:
+        record["preset"] = preset
+    return record
 
 
 def append(path: Path, record: dict[str, Any]) -> None:

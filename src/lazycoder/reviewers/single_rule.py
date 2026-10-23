@@ -69,11 +69,24 @@ class SingleRuleReviewer:
 
     def review(self, block: CodeBlock, rule: ReviewRule) -> RuleResult:
         prompt = self._build_prompt(block=block, rule=rule)
-        parsed = self._parse_response(self._client.generate(prompt))
-        return self._to_rule_result(parsed, block=block, rule=rule)
+        return self.judge(self._client.generate(prompt), block=block, rule=rule)
 
+    @classmethod
+    def judge(
+        cls, raw_response: str, *, block: CodeBlock, rule: ReviewRule
+    ) -> RuleResult:
+        """Validate one raw answer for (block, rule), wherever it came from.
+
+        The API path and agent mode share this gate, so an answer written by
+        the user's own agent is held to the same contract as the live model:
+        strict outcome, a citation inside the hunk, severity from the rubric.
+        """
+        parsed = cls._parse_response(raw_response)
+        return cls._to_rule_result(parsed, block=block, rule=rule)
+
+    @staticmethod
     def _to_rule_result(
-        self, parsed: _ReviewerResponse, *, block: CodeBlock, rule: ReviewRule
+        parsed: _ReviewerResponse, *, block: CodeBlock, rule: ReviewRule
     ) -> RuleResult:
         """Build the domain result, citing the diff rather than trusting the model."""
         severity = rule.severity_if_unjustified
@@ -178,8 +191,9 @@ class SingleRuleReviewer:
             "----- END UNTRUSTED CODE BLOCK -----\n"
         )
 
-    def _parse_response(self, raw_response: str) -> _ReviewerResponse:
-        payload = self._extract_json_object(raw_response)
+    @classmethod
+    def _parse_response(cls, raw_response: str) -> _ReviewerResponse:
+        payload = cls._extract_json_object(raw_response)
         _normalize_outcome(payload)
         try:
             return _ReviewerResponse.model_validate(payload)
