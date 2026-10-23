@@ -108,7 +108,10 @@ lazycoder packet --corpus corpus/seed.jsonl --out /tmp/corpus-packet.json
 lazycoder check --corpus corpus/seed.jsonl --answers /tmp/corpus-answers.json --agent claude-code
 ```
 
-The packet carries file, line and code only: no ids, labels or PR links. The
+Add `--context corpus/seed.context.jsonl` to both commands to review each
+hunk inside its file (±120 lines, hunk lines marked `*`); for a real diff,
+`--context .` reads the post-change checkout. The packet carries file, line
+and code only: no ids, labels or PR links. The
 labels still sit in `corpus/seed.jsonl`, so an agent that can read the repo can
 cheat; answer from a copy of the packet outside it. `check --corpus` prints the
 same quiet rate, per-rule cull decision and fail-on gate as `corpus_cli.py run`,
