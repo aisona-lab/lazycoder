@@ -203,6 +203,8 @@ class CorpusReport:
     caught: int
     missed: int
     per_rule: dict[RuleId, RuleVerdict] = field(default_factory=dict)
+    scored_defective_hunks: int = 0
+    flagged_defective_hunks: int = 0
 
     @property
     def quiet_rate(self) -> float:
@@ -218,8 +220,25 @@ class CorpusReport:
 
     @property
     def recall(self) -> float:
+        """Rule recall: the labelled rule itself fired. Reported, not gated.
+
+        Rules overlap (R4 / R7 / R12 / R13 can all describe one bug), so this
+        partly measures which name the reviewer picked, not whether it saw.
+        """
         expected = self.caught + self.missed
         return self.caught / expected if expected else 1.0
+
+    @property
+    def hunk_recall(self) -> float:
+        """Share of in-scope defective hunks that drew at least one finding.
+
+        The gated recall since 2026-10-23 (pre-registered before Stage 3a).
+        It overstates detection when the finding is about something other
+        than the labelled defect; read `unlabelled` to see how often.
+        """
+        if not self.scored_defective_hunks:
+            return 1.0
+        return self.flagged_defective_hunks / self.scored_defective_hunks
 
 
 def report(results: list[HunkResult], rubric: ReviewRulesConfig) -> CorpusReport:
@@ -259,6 +278,10 @@ def report(results: list[HunkResult], rubric: ReviewRulesConfig) -> CorpusReport
         caught=sum(caught.values()),
         missed=sum(missed.values()),
         per_rule=per_rule,
+        # A defective hunk whose labelled rules the preset never asks is out
+        # of scope here too, exactly as in rule recall.
+        scored_defective_hunks=sum(1 for r in defective if r.expected),
+        flagged_defective_hunks=sum(1 for r in defective if r.expected and r.fired),
     )
 
 
@@ -282,6 +305,9 @@ FAIL_ON_MAX_HIGH_NOISE_RATE = 0.05
 # Amended 2026-10-23, before any live corpus score exists: a reviewer that
 # never speaks has a perfect quiet rate. Agent mode makes that reviewer cheap
 # to run, so the gate also needs it to catch at least half the labelled defects.
+# Amended again 2026-10-23, after runs 1-2 and before Stage 3a: "catch" is
+# hunk-level (any rule fired on the defective hunk), not rule-level. Neither
+# past run changes outcome (hunk recall 1/15 and 3/15, both under the floor).
 FAIL_ON_MIN_RECALL = 0.50
 
 
@@ -350,7 +376,7 @@ class FailOnGate:
 
 def fail_on_gate(summary: CorpusReport, rubric: ReviewRulesConfig) -> FailOnGate:
     """Gate from the hardening plan: quiet_rate ≥ 80%, no high rule > 5% noise,
-    and recall ≥ 50% so silence alone cannot pass it."""
+    and hunk recall ≥ 50% so silence alone cannot pass it."""
     high_noisy = tuple(
         rule.id
         for rule in rubric.rules
@@ -358,12 +384,12 @@ def fail_on_gate(summary: CorpusReport, rubric: ReviewRulesConfig) -> FailOnGate
         and summary.per_rule[rule.id].clean_noise_rate > FAIL_ON_MAX_HIGH_NOISE_RATE
     )
     quiet_ok = summary.quiet_rate >= FAIL_ON_MIN_QUIET_RATE
-    recall_ok = summary.recall >= FAIL_ON_MIN_RECALL
+    recall_ok = summary.hunk_recall >= FAIL_ON_MIN_RECALL
     ready = quiet_ok and recall_ok and not high_noisy
     if ready:
         reason = (
             f"quiet_rate {summary.quiet_rate:.0%} ≥ {FAIL_ON_MIN_QUIET_RATE:.0%}, "
-            f"recall {summary.recall:.0%} ≥ {FAIL_ON_MIN_RECALL:.0%} "
+            f"hunk recall {summary.hunk_recall:.0%} ≥ {FAIL_ON_MIN_RECALL:.0%} "
             f"and no high rule above {FAIL_ON_MAX_HIGH_NOISE_RATE:.0%} clean noise"
         )
     else:
@@ -373,7 +399,9 @@ def fail_on_gate(summary: CorpusReport, rubric: ReviewRulesConfig) -> FailOnGate
                 f"quiet_rate {summary.quiet_rate:.0%} < {FAIL_ON_MIN_QUIET_RATE:.0%}"
             )
         if not recall_ok:
-            parts.append(f"recall {summary.recall:.0%} < {FAIL_ON_MIN_RECALL:.0%}")
+            parts.append(
+                f"hunk recall {summary.hunk_recall:.0%} < {FAIL_ON_MIN_RECALL:.0%}"
+            )
         if high_noisy:
             parts.append(
                 "high-noise "
@@ -426,8 +454,12 @@ def format_corpus_summary(
         f"  ({summary.quiet_clean_hunks}/{summary.clean_hunks} clean hunks"
         " drew no comment)",
         f"noise       {summary.noise_per_clean_hunk:.2f} findings per clean hunk",
-        f"recall      {summary.recall:.0%}"
-        f"  ({summary.caught} caught, {summary.missed} missed)",
+        f"hunk recall {summary.hunk_recall:.0%}"
+        f"  ({summary.flagged_defective_hunks}/{summary.scored_defective_hunks}"
+        " defective hunks drew a finding; gated)",
+        f"rule recall {summary.recall:.0%}"
+        f"  ({summary.caught} caught, {summary.missed} missed; the labelled rule"
+        " itself fired)",
         f"\n{'rule':6}{'noise%':>8}{'caught':>8}{'missed':>8}{'abstain':>9}{'cull':>14}",
     ]
     plan = cull_plan(summary, rubric)

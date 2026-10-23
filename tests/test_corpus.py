@@ -307,7 +307,66 @@ def test_fail_on_gate_refuses_a_reviewer_that_never_speaks(
 
     assert summary.quiet_rate == 1.0
     assert gate.ready is False
-    assert "recall 0% < 50%" in gate.reason
+    assert "hunk recall 0% < 50%" in gate.reason
+
+
+def test_hunk_recall_counts_any_rule_and_gates_on_it(
+    rubric: ReviewRulesConfig,
+) -> None:
+    from lazycoder.corpus import HunkResult, Label, fail_on_gate, report
+
+    def defective(hid: str, fired: frozenset[RuleId]) -> HunkResult:
+        return HunkResult(
+            hid,
+            Label.DEFECTIVE,
+            frozenset({RuleId.R4}),
+            fired,
+            frozenset(),
+            Verdict.REQUEST_CHANGES,
+            frozenset(),
+        )
+
+    quiet = HunkResult(
+        "C1",
+        Label.CLEAN,
+        frozenset(),
+        frozenset(),
+        frozenset(),
+        Verdict.APPROVE,
+        frozenset(),
+    )
+    # The defect is described under R13, not the labelled R4.
+    results = [
+        quiet,
+        defective("D1", frozenset({RuleId.R13})),
+        defective("D2", frozenset()),
+    ]
+    summary = report(results, rubric)
+
+    assert summary.recall == 0.0  # rule recall: R4 never fired
+    assert summary.hunk_recall == 0.5  # one of two defective hunks flagged
+    assert fail_on_gate(summary, rubric).ready is True
+
+
+def test_out_of_scope_defects_do_not_count_toward_hunk_recall(
+    rubric: ReviewRulesConfig,
+) -> None:
+    from lazycoder.corpus import HunkResult, Label, report
+
+    # A preset that never asks the labelled rule leaves an empty expectation.
+    unscored = HunkResult(
+        "D1",
+        Label.DEFECTIVE,
+        frozenset(),
+        frozenset({RuleId.R7}),
+        frozenset(),
+        Verdict.BLOCK,
+        frozenset(),
+    )
+    summary = report([unscored], rubric)
+
+    assert summary.scored_defective_hunks == 0
+    assert summary.hunk_recall == 1.0
 
 
 def test_corpus_shape_targets_stage2_minimums(tmp_path) -> None:
