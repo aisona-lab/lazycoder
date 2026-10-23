@@ -1,0 +1,104 @@
+lazycoder Stage 2 — corpus run 2, agent mode (A/B against run 1)
+date: 2026-10-23
+corpus: corpus/seed.jsonl (22 clean / 15 defective hunks from 8 fix PRs)
+preset: full (17 rules) — 629 answers, same 8 shards as run 1
+reviewer: 8 fresh Claude Code subagents, engine 0.3.0 (main @ 4157f6b)
+gate: recall floor (>= 50%) committed in 4a343b4 before run 1
+
+The one change from run 1: the subagent prompt no longer says "Only fail a
+rule when the code in front of you actually shows the problem; do not fail
+on style taste or speculation". Everything else is identical, including the
+soft isolation (instruction, not sandbox) described in run 1's artifact.
+
+Effect of removing the sentence:
+                    run 1     run 2
+  quiet rate        100%      86%   (3 clean hunks drew one finding each)
+  noise/clean hunk  0.00      0.14
+  recall (by rule)  0/15      0/15
+  gate ready        no        no    (recall 0% < 50%)
+
+Read by a human after scoring (NOT a pre-registered metric, do not gate on
+it): which labelled defects the reviewer described, under any rule.
+  - httpx-3442-old-0: "verify=False returns early, so cert loading is
+    skipped" (R2/R13/R16). Matches the label (R7, "verify=False with cert=
+    broke TLS posture"). Found in run 2 only.
+  - requests-7308-old-0: "`$` also matches before a trailing newline"
+    (R7/R13). Matches the label (R4, "header validity regex accepted invalid
+    forms"). Found in both runs.
+  - urllib3-5029-old-0: R12/R15 on a `[2:-2]` regex slice. Not the labelled
+    defect (non-standard IPv4 forms).
+  So 2 of the 8 labelled fix PRs were described correctly, and rule-identity
+  scoring counted neither: the rubric's rules overlap enough that "which
+  rule" is closer to a taxonomy choice than a detection signal.
+
+Clean-hunk findings worth a second look (labels are provisional):
+  - click-3876-3 R4: format_arguments passes get_help_record() results to
+    write_dl without filtering None, unlike format_options. Run 1 marked the
+    same spot insufficient_context. May be a real defect in a "clean" hunk;
+    not verified.
+
+clean     requests-7505-0               NOISE R8
+clean     httpx-3773-0                  quiet
+clean     click-3876-3                  NOISE R4
+clean     urllib3-5277-1                quiet
+clean     requests-7505-1               quiet
+clean     httpx-3699-1                  quiet
+clean     click-3876-4                  quiet
+clean     urllib3-5276-0                quiet
+clean     requests-7498-0               quiet
+clean     httpx-3699-2                  quiet
+clean     click-3866-3                  quiet
+clean     urllib3-5276-1                quiet
+clean     requests-7497-1               quiet
+clean     httpx-3690-0                  quiet
+clean     click-3866-4                  quiet
+clean     urllib3-5274-1                quiet
+clean     requests-7497-2               quiet
+clean     httpx-3690-1                  NOISE R12
+clean     click-3861-1                  quiet
+clean     urllib3-5269-3                quiet
+clean     requests-7496-1               quiet
+clean     httpx-3673-0                  quiet
+defective urllib3-5029-old-0            caught -  MISSED R7  unlabelled R12,R15
+defective urllib3-5029-old-1            caught -  MISSED R7
+defective urllib3-5255-old-0            caught -  MISSED R4
+defective urllib3-5255-old-1            caught -  MISSED R4
+defective urllib3-5260-old-0            caught -  MISSED R4
+defective urllib3-5260-old-1            caught -  MISSED R4
+defective requests-7308-old-0           caught -  MISSED R4  unlabelled R13,R7
+defective requests-7308-old-1           caught -  MISSED R4
+defective httpx-3442-old-0              caught -  MISSED R7  unlabelled R13,R16,R2
+defective requests-7310-old-0           caught -  MISSED R7
+defective requests-7310-old-1           caught -  MISSED R7
+defective httpx-3380-old-0              caught -  MISSED R3
+defective httpx-3380-old-1              caught -  MISSED R3
+defective urllib3-5271-old-0            caught -  MISSED R4
+defective urllib3-5271-old-1            caught -  MISSED R4
+
+quiet rate  86%  (19/22 clean hunks drew no comment)
+noise       0.14 findings per clean hunk
+recall      0%  (0 caught, 15 missed)
+
+rule    noise%  caught  missed  abstain          cull
+R1         0%       0       0      0%          keep
+R2         0%       0       0      3%          keep
+R3         0%       0       2      5%          keep
+R4         5%       0       8     14%          keep
+R5         0%       0       0      0%          keep
+R6         0%       0       0      0%          keep
+R7         0%       0       5      3%          keep
+R8         5%       0       0      3%          keep
+R9         0%       0       0      3%          keep
+R10        0%       0       0      0%          keep
+R11        0%       0       0      0%          keep
+R12        5%       0       0      3%          keep
+R13        0%       0       0     41%          keep
+R14        0%       0       0     78% keep_stage_3a
+R15        0%       0       0      0%          keep
+R16        0%       0       0     30%          keep
+R17        0%       0       0      8%          keep
+
+fail-on gate ready: False  (recall 0% < 50%)
+Action fail-on stays never — metrics do not justify a blocking gate.
+
+measured: agent:claude-code-subagents-run2, preset full. This scores that agent as a reviewer, not the API path.

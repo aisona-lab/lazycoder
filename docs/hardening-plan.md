@@ -75,6 +75,16 @@ recall floor did its job. The reviewer went from Stage 1's noise (precision
 rule-identity scoring hides it. The run is confounded by a conservative
 subagent prompt and soft isolation; no cull decision is taken from it.
 
+**Run 2 (same shards, conservative sentence removed,
+[`docs/eval-runs/2026-10-23-agent-mode-corpus-run2.txt`](eval-runs/2026-10-23-agent-mode-corpus-run2.txt)):**
+quiet rate 86%, 0.14 noise per clean hunk, recall still **0%** by rule, gate
+not ready. Read by hand, the reviewer described 2 of the 8 labelled defects
+(httpx-3442, requests-7308) but filed both under rules other than the label.
+Two readings, both open: rule-identity scoring undercounts a reviewer whose
+rules overlap, and hunk-only context leaves most defects invisible (R13
+abstains 41%, R14 78%), which is the Stage 3a case. Any defect-level metric
+must be pre-registered before the next run, not fitted to this one.
+
 
 Corpus of 30–50 hunks from merged OSS PRs: half with a defect the follow-up fix
 confirms, half genuinely clean. Not toy snippets.
