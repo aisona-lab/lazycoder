@@ -33,6 +33,6 @@
     "on_uncertainty": "lower confidence and escalate to human rather than guess",
     "on_guardrail_trigger": "halt the run and report"
   },
-  "stop_conditions": ["verdict produced", "max_steps reached", "unrecoverable error", "guardrail triggered"],
+  "stop_conditions": ["verdict produced", "scope exceeds guardrail limits", "unrecoverable error", "guardrail triggered"],
   "outputs": ["review_report.json", "one append-only decision_log entry"]
 }

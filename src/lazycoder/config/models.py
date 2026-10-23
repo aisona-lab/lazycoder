@@ -95,7 +95,10 @@ class HumanInTheLoop(_StrictModel):
 
 
 class GuardrailLimits(_StrictModel):
-    max_steps_per_review: int = Field(gt=0)
+    # Deprecated and never enforced: the pipeline has no agent "steps", and
+    # read as model calls it would refuse any diff over one hunk. Accepted so
+    # configs copied from <= 0.3.0 still load; the bundled config omits it.
+    max_steps_per_review: int | None = Field(default=None, gt=0)
     max_files_per_run: int = Field(gt=0)
     max_tokens_budget: int = Field(gt=0)
 

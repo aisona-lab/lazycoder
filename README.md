@@ -38,7 +38,12 @@ git diff main | uvx lazycoder -    # review your branch straight from a pipe
 ```
 
 Exit codes map the verdict — `0` APPROVE, `1` REQUEST_CHANGES, `2` BLOCK — so it
-drops into CI as a gate with no glue code. `--json` emits the full report;
+drops into CI as a gate with no glue code. `3` is an operational error; `4`
+means the diff exceeds the `guardrails.json` limits (more than
+`max_files_per_run` files, or on the API path an estimated input above
+`max_tokens_budget`), checked before any model call or key; narrow it with
+`--preset`, split it, or pass `--allow-large`. The Action reports `4` as
+SKIPPED when `fail-on: never` and fails otherwise. `--json` emits the full report;
 `--log runs.jsonl` appends one append-only decision record per run.
 `lazycoder replay runs.jsonl` recomputes each recorded verdict from
 `rule_results` alone — no model call, no key — and exits non-zero on drift.

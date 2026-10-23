@@ -39,12 +39,15 @@ from lazycoder.evals import (
     score_case,
     summarize,
 )
+from lazycoder.limits import measure, over_limits
 from lazycoder.llm.anthropic_client import AnthropicClient
 from lazycoder.orchestrator import parse_diff, review_diff
 from lazycoder.reviewers import SingleRuleReviewer
 
 EXIT_CODES = {Verdict.APPROVE: 0, Verdict.REQUEST_CHANGES: 1, Verdict.BLOCK: 2}
 EXIT_ERROR = 3
+# The diff exceeds guardrails.json limits: nothing was reviewed or spent.
+EXIT_SCOPE = 4
 EXIT_REPLAY_MISMATCH = 1
 
 
@@ -68,6 +71,36 @@ def _load(
     presets = load_presets(config_dir)
     name = preset or presets.default
     return app, apply_preset(app.review_rules, presets, name), name, config_dir
+
+
+def _add_allow_large(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument(
+        "--allow-large",
+        action="store_true",
+        help="proceed past guardrails.json limits (files per run, API token"
+        " budget): the human OK the working loop asks for",
+    )
+
+
+def _scope_refusal(
+    blocks: list[CodeBlock],
+    rubric: ReviewRulesConfig,
+    app: AppConfig,
+    *,
+    api: bool,
+    allow: bool,
+) -> str | None:
+    """The refusal message when a diff exceeds the guardrail limits, else None."""
+    if allow or not blocks:
+        return None
+    reasons = over_limits(measure(blocks, rubric), app.guardrails.limits, api=api)
+    if not reasons:
+        return None
+    return (
+        "error: review scope exceeds guardrails.json limits: "
+        + "; ".join(reasons)
+        + ". Split the diff, narrow it with --preset, or pass --allow-large."
+    )
 
 
 def _add_source_args(parser: argparse.ArgumentParser, diff_help: str) -> None:
@@ -204,6 +237,7 @@ def _review_main(argv: list[str]) -> int:
     )
     parser.add_argument("diff", help="unified diff file, or '-' for stdin")
     _add_rubric_args(parser)
+    _add_allow_large(parser)
     parser.add_argument(
         "--json", action="store_true", help="emit the full ReviewReport as JSON"
     )
@@ -224,7 +258,13 @@ def _review_main(argv: list[str]) -> int:
 
     started_at = datetime.now(UTC)
     try:
-        _, rubric, preset, _ = _load(args.config, args.preset)
+        app, rubric, preset, _ = _load(args.config, args.preset)
+        refusal = _scope_refusal(
+            parse_diff(diff_text), rubric, app, api=True, allow=args.allow_large
+        )
+        if refusal:
+            print(refusal, file=sys.stderr)
+            return EXIT_SCOPE
         client = AnthropicClient()
         report = review_diff(SingleRuleReviewer(client=client), diff_text, rubric)
     except (
@@ -271,6 +311,7 @@ def _packet_main(argv: list[str]) -> int:
     _add_source_args(parser, "unified diff file, or '-'")
     _add_rubric_args(parser)
     parser.add_argument("--out", help="write the packet here instead of stdout")
+    _add_allow_large(parser)
     args = parser.parse_args(argv)
     _one_source(parser, args)
 
@@ -281,8 +322,15 @@ def _packet_main(argv: list[str]) -> int:
         elif args.corpus:
             blocks = [hunk.block() for hunk in load_corpus(Path(args.corpus))]
         else:
+            diff_text = _read_diff(args.diff)
+            refusal = _scope_refusal(
+                parse_diff(diff_text), rubric, app, api=False, allow=args.allow_large
+            )
+            if refusal:
+                print(refusal, file=sys.stderr)
+                return EXIT_SCOPE
             blocks, _ = _diff_with_canaries(
-                _read_diff(args.diff), rubric, preset, config_dir, args.canaries
+                diff_text, rubric, preset, config_dir, args.canaries
             )
     except (ConfigLoadError, CorpusLoadError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
