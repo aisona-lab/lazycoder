@@ -24,6 +24,7 @@ from lazycoder.domain import (
     RuleId,
     RuleResult,
 )
+from lazycoder.redact import MARKER, redact_secrets
 from lazycoder.reviewers import LLMReviewerParseError, SingleRuleReviewer
 
 PACKET_VERSION = 1
@@ -52,6 +53,9 @@ INSTRUCTIONS = [
     " is missing.",
     "Do not report severity or a verdict: `lazycoder check` derives both from"
     " the rubric.",
+    f"{MARKER} marks a value the harness removed because it looks like a"
+    " credential. The literal was in the code at that spot: judge it as a"
+    " hardcoded secret, without guessing its value.",
     'Write {"answers": [...]} as JSON, one object per pair, in the shape of'
     " `answer_example`.",
 ]
@@ -95,7 +99,7 @@ def build_packet(
                 "file": block.file,
                 "start_line": block.start_line,
                 "end_line": block.end_line,
-                "code": block.numbered(),
+                "code": redact_secrets(block.numbered()),
             }
             for block in blocks
         ],
