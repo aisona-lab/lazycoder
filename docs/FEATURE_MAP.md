@@ -16,6 +16,7 @@ Process lessons: [`LEARNINGS.md`](../LEARNINGS.md) (SPEC→PLAN→OK→prove→m
 | Feature | Unit tests | Fixtures | Notes |
 |---------|------------|----------|-------|
 | Config load + loud failure | `test_config_loader.py` | — | Every `config/*.json` validates |
+| Secret redaction at both model exits (prompt, packet) | `test_redact.py` | — | `guardrails.json` `never_send_secrets_to_llm`; line count preserved; `<redacted:secret>` keeps R7 evidence |
 | Domain contracts (Finding / RuleResult / ReviewReport) | `test_domain_models.py` | — | Invalid state unrepresentable |
 | `derive_verdict` from rule outcomes × rubric severities | `test_verdict_aggregator.py` | — | Pure; no model |
 | Diff parse → CodeBlock; file/line from hunk | `test_orchestrator.py` | — | Model cannot invent `file` |
