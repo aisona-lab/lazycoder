@@ -279,6 +279,10 @@ STAGE3A_MAX_NOISE_RATE = 0.10
 # Action fail-on gate (do not flip fail-on away from never until both hold)
 FAIL_ON_MIN_QUIET_RATE = 0.80
 FAIL_ON_MAX_HIGH_NOISE_RATE = 0.05
+# Amended 2026-10-23, before any live corpus score exists: a reviewer that
+# never speaks has a perfect quiet rate. Agent mode makes that reviewer cheap
+# to run, so the gate also needs it to catch at least half the labelled defects.
+FAIL_ON_MIN_RECALL = 0.50
 
 
 class CullAction(StrEnum):
@@ -345,7 +349,8 @@ class FailOnGate:
 
 
 def fail_on_gate(summary: CorpusReport, rubric: ReviewRulesConfig) -> FailOnGate:
-    """Gate from the hardening plan: quiet_rate ≥ 80% and no high rule > 5% noise."""
+    """Gate from the hardening plan: quiet_rate ≥ 80%, no high rule > 5% noise,
+    and recall ≥ 50% so silence alone cannot pass it."""
     high_noisy = tuple(
         rule.id
         for rule in rubric.rules
@@ -353,10 +358,12 @@ def fail_on_gate(summary: CorpusReport, rubric: ReviewRulesConfig) -> FailOnGate
         and summary.per_rule[rule.id].clean_noise_rate > FAIL_ON_MAX_HIGH_NOISE_RATE
     )
     quiet_ok = summary.quiet_rate >= FAIL_ON_MIN_QUIET_RATE
-    ready = quiet_ok and not high_noisy
+    recall_ok = summary.recall >= FAIL_ON_MIN_RECALL
+    ready = quiet_ok and recall_ok and not high_noisy
     if ready:
         reason = (
-            f"quiet_rate {summary.quiet_rate:.0%} ≥ {FAIL_ON_MIN_QUIET_RATE:.0%} "
+            f"quiet_rate {summary.quiet_rate:.0%} ≥ {FAIL_ON_MIN_QUIET_RATE:.0%}, "
+            f"recall {summary.recall:.0%} ≥ {FAIL_ON_MIN_RECALL:.0%} "
             f"and no high rule above {FAIL_ON_MAX_HIGH_NOISE_RATE:.0%} clean noise"
         )
     else:
@@ -365,6 +372,8 @@ def fail_on_gate(summary: CorpusReport, rubric: ReviewRulesConfig) -> FailOnGate
             parts.append(
                 f"quiet_rate {summary.quiet_rate:.0%} < {FAIL_ON_MIN_QUIET_RATE:.0%}"
             )
+        if not recall_ok:
+            parts.append(f"recall {summary.recall:.0%} < {FAIL_ON_MIN_RECALL:.0%}")
         if high_noisy:
             parts.append(
                 "high-noise "

@@ -124,11 +124,19 @@ Gate for flipping the Action's `fail-on` back to `request-changes`:
 words: at least four in five clean hunks draw no comment at all, and nothing
 that can block fires on clean code more than one time in twenty.
 
-Two things this deliberately does *not* do. It does not set a recall floor —
-recall is already 0.92 and is not the failing number, so a threshold there
-would only give the cull an excuse to keep noisy rules. And it does not score
+Two things this deliberately does *not* do. It does not set a recall floor
+for the cull — recall is already 0.92 and is not the failing number, so a
+threshold there would only give the cull an excuse to keep noisy rules. And it does not score
 `unlabelled` findings on defective hunks in either direction; they get read by
 a human and either become labels or become nothing.
+
+**Amendment, 2026-10-23 — before any live corpus score.** The fail-on gate
+gains **`recall ≥ 50%`** on the labelled defects. Reason: a dry run of agent
+mode with a reviewer that answers `pass` to everything scored quiet_rate 100%,
+recall 0%, and the gate read *ready*. The "no recall floor" call above assumed
+the API reviewer (recall 0.92); agent mode makes a silent reviewer cheap to
+run, and silence must not be able to flip `fail-on`. The cull table is
+unchanged: the floor applies to the gate only.
 
 ## Stage 3a — the file is the unit (~1 day)
 
