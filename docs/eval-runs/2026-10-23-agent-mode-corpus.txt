@@ -1,0 +1,90 @@
+lazycoder Stage 2 — first live corpus run, agent mode
+date: 2026-10-23
+corpus: corpus/seed.jsonl (22 clean / 15 defective)
+preset: full (17 rules) — 37 hunks x 17 rules = 629 answers
+reviewer: 8 Claude Code subagents (one per 5-hunk shard), engine 0.3.0
+gate: recall floor (>= 50%) committed in 4a343b4 BEFORE this run
+command: lazycoder check --corpus corpus/seed.jsonl --answers answers.json --agent claude-code-subagents
+
+Method and its limits (read before the numbers):
+- Isolation was soft. Each subagent was told to read only its shard file
+  (file, line, code; no labels, ids or PR links) and nothing else: no repo,
+  no git, no web. They share the filesystem with the repo, so this rests on
+  instruction-following, not on a sandbox. Each reported reading only its
+  shard.
+- Confound: the subagent prompt added "Only fail a rule when the code in
+  front of you actually shows the problem; do not fail on style taste or
+  speculation", which the packet instructions do not say. It pushes toward
+  silence. This run measures that prompt as much as the reviewer.
+- Scoring is by rule identity. On requests-7308-old-0 the reviewer flagged
+  the header regexes (`$` also matches before a trailing newline, so
+  "bar\n" passes the CR/LF check; fix: \Z or fullmatch) under R7/R12/R13.
+  The label is R4, so it scores as "unlabelled", not caught. The PR is
+  "Fix cosmetic header validity parsing regex"; that this is the same defect
+  is likely but not verified against the fix commit.
+
+clean     requests-7505-0               quiet
+clean     httpx-3773-0                  quiet
+clean     click-3876-3                  quiet
+clean     urllib3-5277-1                quiet
+clean     requests-7505-1               quiet
+clean     httpx-3699-1                  quiet
+clean     click-3876-4                  quiet
+clean     urllib3-5276-0                quiet
+clean     requests-7498-0               quiet
+clean     httpx-3699-2                  quiet
+clean     click-3866-3                  quiet
+clean     urllib3-5276-1                quiet
+clean     requests-7497-1               quiet
+clean     httpx-3690-0                  quiet
+clean     click-3866-4                  quiet
+clean     urllib3-5274-1                quiet
+clean     requests-7497-2               quiet
+clean     httpx-3690-1                  quiet
+clean     click-3861-1                  quiet
+clean     urllib3-5269-3                quiet
+clean     requests-7496-1               quiet
+clean     httpx-3673-0                  quiet
+defective urllib3-5029-old-0            caught -  MISSED R7
+defective urllib3-5029-old-1            caught -  MISSED R7
+defective urllib3-5255-old-0            caught -  MISSED R4
+defective urllib3-5255-old-1            caught -  MISSED R4
+defective urllib3-5260-old-0            caught -  MISSED R4
+defective urllib3-5260-old-1            caught -  MISSED R4
+defective requests-7308-old-0           caught -  MISSED R4  unlabelled R12,R13,R7
+defective requests-7308-old-1           caught -  MISSED R4
+defective httpx-3442-old-0              caught -  MISSED R7
+defective requests-7310-old-0           caught -  MISSED R7
+defective requests-7310-old-1           caught -  MISSED R7
+defective httpx-3380-old-0              caught -  MISSED R3
+defective httpx-3380-old-1              caught -  MISSED R3
+defective urllib3-5271-old-0            caught -  MISSED R4
+defective urllib3-5271-old-1            caught -  MISSED R4
+
+quiet rate  100%  (22/22 clean hunks drew no comment)
+noise       0.00 findings per clean hunk
+recall      0%  (0 caught, 15 missed)
+
+rule    noise%  caught  missed  abstain          cull
+R1         0%       0       0      0%          keep
+R2         0%       0       0      3%          keep
+R3         0%       0       2      8%          keep
+R4         0%       0       8     19%          keep
+R5         0%       0       0      0%          keep
+R6         0%       0       0      0%          keep
+R7         0%       0       5      3%          keep
+R8         0%       0       0      0%          keep
+R9         0%       0       0      0%          keep
+R10        0%       0       0      0%          keep
+R11        0%       0       0      0%          keep
+R12        0%       0       0      8%          keep
+R13        0%       0       0     16%          keep
+R14        0%       0       0     54% keep_stage_3a
+R15        0%       0       0      0%          keep
+R16        0%       0       0     27%          keep
+R17        0%       0       0      0%          keep
+
+fail-on gate ready: False  (recall 0% < 50%)
+Action fail-on stays never — metrics do not justify a blocking gate.
+
+measured: agent:claude-code-subagents, preset full. This scores that agent as a reviewer, not the API path.

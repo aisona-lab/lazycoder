@@ -66,6 +66,15 @@ agent must not be able to read `seed.jsonl`. Note before reading results:
 8 of the 15 labelled defects are R4 and the `focused` preset does not ask R4,
 so `focused` cannot catch most of this corpus by construction.
 
+**First live run (agent mode, 2026-10-23,
+[`docs/eval-runs/2026-10-23-agent-mode-corpus.txt`](eval-runs/2026-10-23-agent-mode-corpus.txt)):**
+quiet rate 100%, recall **0%** (0/15 by rule), gate **not ready** — the
+recall floor did its job. The reviewer went from Stage 1's noise (precision
+0.17, API, toy cases) to total silence on real hunks. One real-looking defect
+(requests-7308 header regex) was found under R7/R12/R13 while labelled R4, so
+rule-identity scoring hides it. The run is confounded by a conservative
+subagent prompt and soft isolation; no cull decision is taken from it.
+
 
 Corpus of 30–50 hunks from merged OSS PRs: half with a defect the follow-up fix
 confirms, half genuinely clean. Not toy snippets.
