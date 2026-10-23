@@ -279,6 +279,37 @@ def test_fail_on_gate_requires_quiet_rate_and_calm_high_rules(
     assert RuleId.R4 in gate.high_rules_over_noise_cap
 
 
+def test_fail_on_gate_refuses_a_reviewer_that_never_speaks(
+    rubric: ReviewRulesConfig,
+) -> None:
+    from lazycoder.corpus import HunkResult, Label, fail_on_gate, report
+
+    quiet = HunkResult(
+        "C1",
+        Label.CLEAN,
+        frozenset(),
+        frozenset(),
+        frozenset(),
+        Verdict.APPROVE,
+        frozenset(),
+    )
+    silent_on_defect = HunkResult(
+        "D1",
+        Label.DEFECTIVE,
+        frozenset({RuleId.R7}),
+        frozenset(),
+        frozenset(),
+        Verdict.APPROVE,
+        frozenset(),
+    )
+    summary = report([quiet, quiet, silent_on_defect], rubric)
+    gate = fail_on_gate(summary, rubric)
+
+    assert summary.quiet_rate == 1.0
+    assert gate.ready is False
+    assert "recall 0% < 50%" in gate.reason
+
+
 def test_corpus_shape_targets_stage2_minimums(tmp_path) -> None:
     from lazycoder.corpus import (
         MIN_CLEAN_HUNKS,

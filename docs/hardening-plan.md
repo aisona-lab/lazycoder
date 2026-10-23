@@ -66,6 +66,15 @@ agent must not be able to read `seed.jsonl`. Note before reading results:
 8 of the 15 labelled defects are R4 and the `focused` preset does not ask R4,
 so `focused` cannot catch most of this corpus by construction.
 
+**First live run (agent mode, 2026-10-23,
+[`docs/eval-runs/2026-10-23-agent-mode-corpus.txt`](eval-runs/2026-10-23-agent-mode-corpus.txt)):**
+quiet rate 100%, recall **0%** (0/15 by rule), gate **not ready** — the
+recall floor did its job. The reviewer went from Stage 1's noise (precision
+0.17, API, toy cases) to total silence on real hunks. One real-looking defect
+(requests-7308 header regex) was found under R7/R12/R13 while labelled R4, so
+rule-identity scoring hides it. The run is confounded by a conservative
+subagent prompt and soft isolation; no cull decision is taken from it.
+
 
 Corpus of 30–50 hunks from merged OSS PRs: half with a defect the follow-up fix
 confirms, half genuinely clean. Not toy snippets.
@@ -124,11 +133,19 @@ Gate for flipping the Action's `fail-on` back to `request-changes`:
 words: at least four in five clean hunks draw no comment at all, and nothing
 that can block fires on clean code more than one time in twenty.
 
-Two things this deliberately does *not* do. It does not set a recall floor —
-recall is already 0.92 and is not the failing number, so a threshold there
-would only give the cull an excuse to keep noisy rules. And it does not score
+Two things this deliberately does *not* do. It does not set a recall floor
+for the cull — recall is already 0.92 and is not the failing number, so a
+threshold there would only give the cull an excuse to keep noisy rules. And it does not score
 `unlabelled` findings on defective hunks in either direction; they get read by
 a human and either become labels or become nothing.
+
+**Amendment, 2026-10-23 — before any live corpus score.** The fail-on gate
+gains **`recall ≥ 50%`** on the labelled defects. Reason: a dry run of agent
+mode with a reviewer that answers `pass` to everything scored quiet_rate 100%,
+recall 0%, and the gate read *ready*. The "no recall floor" call above assumed
+the API reviewer (recall 0.92); agent mode makes a silent reviewer cheap to
+run, and silence must not be able to flip `fail-on`. The cull table is
+unchanged: the floor applies to the gate only.
 
 ## Stage 3a — the file is the unit (~1 day)
 

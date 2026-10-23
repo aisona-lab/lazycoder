@@ -37,6 +37,7 @@ from lazycoder.corpus import (  # noqa: E402
     DEMOTE_HIGH_NOISE_RATE,
     FAIL_ON_MAX_HIGH_NOISE_RATE,
     FAIL_ON_MIN_QUIET_RATE,
+    FAIL_ON_MIN_RECALL,
     MIN_CLEAN_HUNKS,
     MIN_DEFECTIVE_HUNKS,
     STAGE3A_ABSTENTION_RATE,
@@ -250,8 +251,10 @@ def prove(path: Path, out: Path | None) -> int:
         f"  demote if clean_noise > {DEMOTE_HIGH_NOISE_RATE:.0%} and severity high",
         f"  stage3a if abstention > {STAGE3A_ABSTENTION_RATE:.0%}"
         f" and clean_noise < {STAGE3A_MAX_NOISE_RATE:.0%}",
-        f"  fail-on ready if quiet_rate ≥ {FAIL_ON_MIN_QUIET_RATE:.0%}"
-        f" and no high rule > {FAIL_ON_MAX_HIGH_NOISE_RATE:.0%} clean noise",
+        f"  fail-on ready if quiet_rate ≥ {FAIL_ON_MIN_QUIET_RATE:.0%},"
+        f" recall ≥ {FAIL_ON_MIN_RECALL:.0%}"
+        f" and no high rule > {FAIL_ON_MAX_HIGH_NOISE_RATE:.0%} clean noise"
+        " (recall floor amended 2026-10-23)",
         f"  shape: ≥{MIN_CLEAN_HUNKS} clean, ≥{MIN_DEFECTIVE_HUNKS} defective",
         "",
     ]
