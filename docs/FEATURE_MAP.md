@@ -55,6 +55,8 @@ from a second embedded copy.
 | `--preset` (rule subset; severities untouched) | `test_presets.py`, `test_agent_mode.py` | `config/presets.json`; optional file, falls back to `full` |
 | Agent mode: `packet` → agent answers → `check` | `test_agent_mode.py` | No key; client construction asserts in tests. Missing / duplicate pair → rule error (never APPROVE); out-of-hunk line rejected; foreign block id / rule → exit 3 |
 | Agent evals: `packet --evals` / `check --evals` | `test_agent_mode.py` | Preset narrows expectation; verdict re-derived by the aggregator, fixture verdicts asserted consistent |
+| Canaries: known-defect blocks planted by a diff-derived seed; missed → rule error | `test_canaries_corpus.py` | `fixtures/deny/`; never in the report; logged as `canaries: {planted, caught}`; packet/check `--canaries` must match (else exit 3) |
+| Corpus scoring in agent mode: `packet --corpus` / `check --corpus` | `test_canaries_corpus.py` | Packet leaks no ids/labels/links; expectations scoped to the preset; same cull + fail-on gate output as `corpus_cli.py run` |
 | `lazycoder init` (agent skill scaffold) | `test_agent_mode.py` | Writes `.claude/skills/lazycoder-review/SKILL.md` + self-ignoring `.lazycoder/`; refuses to overwrite without `--force` |
 | GitHub Action wrapper | `test_soft_skip.py` | `action.yml`; advisory `fail-on: never`; missing key → SKIPPED; auth/billing soft-skip **before** ERROR sticky (`scripts/soft_skip.py`) |
 
