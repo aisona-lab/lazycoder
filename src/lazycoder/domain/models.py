@@ -22,6 +22,11 @@ class CodeBlock:
     file: str
     start_line: int
     code: str
+    # File-level context (Stage 3a): surrounding post-change lines, starting
+    # at context_start, that contain `code` verbatim at start_line. Context is
+    # shown, never cited: findings must still land inside the hunk.
+    context: str | None = None
+    context_start: int = 0
 
     @property
     def end_line(self) -> int:
@@ -36,6 +41,19 @@ class CodeBlock:
         return "\n".join(
             f"{self.start_line + offset}\t{line}"
             for offset, line in enumerate(self.code.split("\n"))
+        )
+
+    def review_view(self) -> str:
+        """What a reviewer is shown: the hunk alone, or the hunk in its file.
+
+        With context, every line keeps its real number and the hunk's lines
+        are marked `*` after the number; only those may be cited.
+        """
+        if self.context is None:
+            return self.numbered()
+        return "\n".join(
+            f"{n}{'*' if self.covers(n) else ''}\t{line}"
+            for n, line in enumerate(self.context.split("\n"), self.context_start)
         )
 
 

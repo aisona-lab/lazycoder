@@ -151,6 +151,14 @@ class SingleRuleReviewer:
         # Every line is prefixed with its real post-change number, so the model
         # cites a line that exists instead of inventing one, and injected text
         # cannot forge the numbering the harness itself writes.
+        shown_as = (
+            " Each line is shown as its real line number, a tab, then the" " source.\n"
+            if block.context is None
+            else " The file around it is shown too: each line is its real line"
+            " number, then `*` if it is part of the change, a tab, then the"
+            " source. Judge the change with that context; cite only `*`"
+            " lines.\n"
+        )
         return (
             "You are reviewing one code block against one rule.\n"
             f"Rule ID: {rule.id.value}\n"
@@ -160,8 +168,7 @@ class SingleRuleReviewer:
             "\n"
             "The block comes from a diff hunk of"
             f" {block.file}, post-change lines"
-            f" {block.start_line}-{block.end_line}. Each line is shown as"
-            " its real line number, a tab, then the source.\n"
+            f" {block.start_line}-{block.end_line}.{shown_as}"
             "\n"
             "Answer with one of three outcomes:\n"
             '- "pass": the rule is satisfied.\n'
@@ -191,7 +198,7 @@ class SingleRuleReviewer:
             f"{MARKER} marks a value the harness removed because it looks"
             " like a credential; the literal was in the code at that spot.\n"
             "----- BEGIN UNTRUSTED CODE BLOCK -----\n"
-            f"{redact_secrets(block.numbered())}\n"
+            f"{redact_secrets(block.review_view())}\n"
             "----- END UNTRUSTED CODE BLOCK -----\n"
         )
 

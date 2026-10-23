@@ -32,6 +32,11 @@ from zoneinfo import ZoneInfo
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from lazycoder.config import load_all_configs  # noqa: E402
+from lazycoder.context import (  # noqa: E402
+    CONTEXT_RADIUS,
+    ContextMismatchError,
+    with_context,
+)
 from lazycoder.corpus import (  # noqa: E402
     DELETE_NOISE_RATE,
     DEMOTE_HIGH_NOISE_RATE,
@@ -311,6 +316,82 @@ def prove(path: Path, out: Path | None) -> int:
     return 0
 
 
+def _git_show(cache: Path, repo: str, sha: str, path: str) -> dict[str, str]:
+    """{rev: text} for `path` at the merge commit and its first parent.
+
+    Clean hunks are the post-change side of the merge; defective ones are the
+    pre-fix side, i.e. the merge's first parent. Shallow-fetches as needed
+    (anonymous git read of a public repo).
+    """
+    repo_dir = cache / repo.replace("/", "__")
+    if not repo_dir.exists():
+        subprocess.run(["git", "init", "-q", "--bare", str(repo_dir)], check=True)
+    have = subprocess.run(
+        ["git", "-C", str(repo_dir), "cat-file", "-e", f"{sha}^1"],
+        capture_output=True,
+    )
+    if have.returncode != 0:
+        subprocess.run(
+            [
+                "git",
+                "-C",
+                str(repo_dir),
+                "fetch",
+                "-q",
+                "--depth=2",
+                f"https://github.com/{repo}",
+                sha,
+            ],
+            check=True,
+        )
+    texts: dict[str, str] = {}
+    for rev in (sha, f"{sha}^1"):
+        shown = subprocess.run(
+            ["git", "-C", str(repo_dir), "show", f"{rev}:{path}"], capture_output=True
+        )
+        if shown.returncode == 0:
+            texts[rev] = shown.stdout.decode("utf-8")
+    return texts
+
+
+def build_context(path: Path, out: Path, cache: Path) -> int:
+    """Write the Stage 3a context sidecar: each hunk's window in its own file.
+
+    The window comes from lazycoder.context.with_context, so it is exactly
+    what review shows. A hunk found at neither revision is a hard error.
+    """
+    cache.mkdir(parents=True, exist_ok=True)
+    rows: list[str] = []
+    for hunk in load_corpus(path):
+        texts = _git_show(cache, hunk.source.repo, hunk.source.sha, hunk.file)
+        block = None
+        for rev, text in texts.items():
+            try:
+                block = with_context(hunk.block(), text)
+            except ContextMismatchError:
+                continue
+            rows.append(
+                json.dumps(
+                    {
+                        "id": hunk.id,
+                        "rev": rev,
+                        "context_start": block.context_start,
+                        "context": block.context,
+                    }
+                )
+            )
+            break
+        if block is None:
+            print(
+                f"error: {hunk.id}: hunk not found at {hunk.source.sha} or its parent",
+                file=sys.stderr,
+            )
+            return 1
+    out.write_text("\n".join(rows) + "\n", encoding="utf-8")
+    print(f"{len(rows)} context windows (radius {CONTEXT_RADIUS}) -> {out}")
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
@@ -342,15 +423,35 @@ def main() -> int:
         help="print only; do not write --out",
     )
 
+    c = sub.add_parser(
+        "context",
+        help="Stage 3a: write each hunk's file window (needs network, once)",
+    )
+    c.add_argument("path", type=Path, help="labelled corpus JSONL")
+    c.add_argument("--out", type=Path, default=Path("corpus/seed.context.jsonl"))
+    c.add_argument(
+        "--git-cache",
+        type=Path,
+        default=Path(".git-cache"),
+        help="where shallow fetches of the source repos are kept",
+    )
+
     args = parser.parse_args()
     try:
+        if args.command == "context":
+            return build_context(args.path, args.out, args.git_cache)
         if args.command == "harvest":
             return harvest(args.repo, args.prs, args.per_pr, args.out, bots=args.bots)
         if args.command == "prove":
             out = None if args.no_artifact else args.out
             return prove(args.path, out)
         return run(args.path)
-    except (CorpusLoadError, RuntimeError, OSError) as exc:
+    except (
+        CorpusLoadError,
+        RuntimeError,
+        OSError,
+        subprocess.CalledProcessError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
 

@@ -23,7 +23,14 @@ from lazycoder.config import AppConfig, apply_preset, load_all_configs, load_pre
 from lazycoder.config.exceptions import ConfigLoadError
 from lazycoder.config.loader import load_fixture_cases
 from lazycoder.config.models import ReviewRulesConfig
+from lazycoder.context import (
+    ContextMismatchError,
+    from_repo,
+    from_sidecar,
+    load_sidecar,
+)
 from lazycoder.corpus import (
+    CorpusHunk,
     CorpusLoadError,
     format_corpus_summary,
     format_result_line,
@@ -41,7 +48,7 @@ from lazycoder.evals import (
 )
 from lazycoder.limits import measure, over_limits
 from lazycoder.llm.anthropic_client import AnthropicClient
-from lazycoder.orchestrator import parse_diff, review_diff
+from lazycoder.orchestrator import parse_diff, review_blocks
 from lazycoder.reviewers import SingleRuleReviewer
 
 EXIT_CODES = {Verdict.APPROVE: 0, Verdict.REQUEST_CHANGES: 1, Verdict.BLOCK: 2}
@@ -112,6 +119,12 @@ def _add_source_args(parser: argparse.ArgumentParser, diff_help: str) -> None:
         "--corpus", help="a labelled corpus JSONL (e.g. corpus/seed.jsonl)"
     )
     parser.add_argument(
+        "--context",
+        help="show each hunk inside its file: for a diff, the root of the"
+        " post-change checkout; for --corpus, its context sidecar JSONL."
+        " packet and check must agree",
+    )
+    parser.add_argument(
         "--canaries",
         type=int,
         default=1,
@@ -123,6 +136,28 @@ def _add_source_args(parser: argparse.ArgumentParser, diff_help: str) -> None:
 def _one_source(parser: argparse.ArgumentParser, args: argparse.Namespace) -> None:
     if sum([bool(args.diff), args.evals, bool(args.corpus)]) != 1:
         parser.error("give exactly one of: a diff, --evals, --corpus")
+    if args.evals and args.context:
+        parser.error("--context does not apply to --evals (snippets have no file)")
+
+
+def _diff_blocks(diff_text: str, context: str | None) -> list[CodeBlock]:
+    """The diff's hunks, inside their files when a checkout is given."""
+    blocks = parse_diff(diff_text)
+    return from_repo(blocks, Path(context)) if context else blocks
+
+
+def _corpus_blocks(
+    corpus: str, context: str | None
+) -> tuple[list[CorpusHunk], list[CodeBlock]]:
+    hunks = load_corpus(Path(corpus))
+    if not context:
+        return hunks, [hunk.block() for hunk in hunks]
+    windows = load_sidecar(Path(context))
+    missing = [hunk.id for hunk in hunks if hunk.id not in windows]
+    if missing:
+        msg = f"{context}: no context for {', '.join(missing)}"
+        raise ContextMismatchError(msg)
+    return hunks, [from_sidecar(h.block(), windows[h.id], h.id) for h in hunks]
 
 
 def _diff_with_canaries(
@@ -131,10 +166,11 @@ def _diff_with_canaries(
     preset: str,
     config_dir: Path,
     count: int,
+    context: str | None = None,
 ) -> tuple[list[CodeBlock], list[Canary]]:
     """The diff's hunks with the canaries packet and check both derive."""
     return plant_canaries(
-        parse_diff(diff_text),
+        _diff_blocks(diff_text, context),
         load_fixture_cases(config_dir, CANARY_PACKS),
         rubric,
         count=count,
@@ -239,6 +275,10 @@ def _review_main(argv: list[str]) -> int:
     _add_rubric_args(parser)
     _add_allow_large(parser)
     parser.add_argument(
+        "--context",
+        help="root of the post-change checkout: show each hunk inside its file",
+    )
+    parser.add_argument(
         "--json", action="store_true", help="emit the full ReviewReport as JSON"
     )
     parser.add_argument(
@@ -259,15 +299,15 @@ def _review_main(argv: list[str]) -> int:
     started_at = datetime.now(UTC)
     try:
         app, rubric, preset, _ = _load(args.config, args.preset)
-        refusal = _scope_refusal(
-            parse_diff(diff_text), rubric, app, api=True, allow=args.allow_large
-        )
+        blocks = _diff_blocks(diff_text, args.context)
+        refusal = _scope_refusal(blocks, rubric, app, api=True, allow=args.allow_large)
         if refusal:
             print(refusal, file=sys.stderr)
             return EXIT_SCOPE
         client = AnthropicClient()
-        report = review_diff(SingleRuleReviewer(client=client), diff_text, rubric)
+        report = review_blocks(SingleRuleReviewer(client=client), blocks, rubric)
     except (
+        ContextMismatchError,
         ConfigLoadError,
         RuntimeError,
         anthropic.APIError,
@@ -320,7 +360,7 @@ def _packet_main(argv: list[str]) -> int:
         if args.evals:
             blocks = [case_block(case) for case in app.evals.cases]
         elif args.corpus:
-            blocks = [hunk.block() for hunk in load_corpus(Path(args.corpus))]
+            _, blocks = _corpus_blocks(args.corpus, args.context)
         else:
             diff_text = _read_diff(args.diff)
             refusal = _scope_refusal(
@@ -330,9 +370,9 @@ def _packet_main(argv: list[str]) -> int:
                 print(refusal, file=sys.stderr)
                 return EXIT_SCOPE
             blocks, _ = _diff_with_canaries(
-                diff_text, rubric, preset, config_dir, args.canaries
+                diff_text, rubric, preset, config_dir, args.canaries, args.context
             )
-    except (ConfigLoadError, CorpusLoadError, OSError) as exc:
+    except (ConfigLoadError, CorpusLoadError, ContextMismatchError, OSError) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
     if not blocks:
@@ -399,8 +439,8 @@ def _check_main(argv: list[str]) -> int:
             print("\n".join(format_summary(summarize(results, rubric))))
             return 0
         if args.corpus:
-            hunks = load_corpus(Path(args.corpus))
-            reports = check_blocks([h.block() for h in hunks], rubric, payload)
+            hunks, corpus_blocks = _corpus_blocks(args.corpus, args.context)
+            reports = check_blocks(corpus_blocks, rubric, payload)
             scored = [
                 score_report(hunk, report, rubric)
                 for hunk, report in zip(hunks, reports, strict=True)
@@ -416,13 +456,19 @@ def _check_main(argv: list[str]) -> int:
             return 0
         diff_text = _read_diff(args.diff)
         blocks, canaries = _diff_with_canaries(
-            diff_text, rubric, preset, config_dir, args.canaries
+            diff_text, rubric, preset, config_dir, args.canaries, args.context
         )
         if not blocks:
             print("error: no reviewable hunks found in the diff", file=sys.stderr)
             return EXIT_ERROR
         report, outcome = check_with_canaries(blocks, canaries, rubric, payload)
-    except (ConfigLoadError, CorpusLoadError, OSError, AgentAnswersError) as exc:
+    except (
+        ConfigLoadError,
+        CorpusLoadError,
+        ContextMismatchError,
+        OSError,
+        AgentAnswersError,
+    ) as exc:
         print(f"error: {exc}", file=sys.stderr)
         return EXIT_ERROR
     except json.JSONDecodeError as exc:

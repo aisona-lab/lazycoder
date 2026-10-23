@@ -49,6 +49,9 @@ INSTRUCTIONS = [
     'A "fail" must cite `line` from the numbering shown in that block'
     " (between its start_line and end_line) and give a `reason`. A citation"
     " outside the block is rejected.",
+    "When a block shows the file around the change, the lines marked `*`"
+    " after their number are the change under review; the rest is context."
+    " Judge the change with that context, and cite only `*` lines.",
     'Use "insufficient_context" instead of guessing, and say in `reason` what'
     " is missing.",
     "Do not report severity or a verdict: `lazycoder check` derives both from"
@@ -67,8 +70,13 @@ class AgentAnswersError(ValueError):
 
 def block_id(block: CodeBlock) -> str:
     """Content-derived id, so answers cannot be replayed against another diff."""
+    # Context is part of the question, so it is part of the id: answers given
+    # without context cannot be checked as answers given with it.
+    context = (
+        "" if block.context is None else f"\0{block.context_start}\0{block.context}"
+    )
     digest = hashlib.sha256(
-        f"{block.file}\0{block.start_line}\0{block.code}".encode()
+        f"{block.file}\0{block.start_line}\0{block.code}{context}".encode()
     ).hexdigest()
     return digest[:12]
 
@@ -99,7 +107,7 @@ def build_packet(
                 "file": block.file,
                 "start_line": block.start_line,
                 "end_line": block.end_line,
-                "code": redact_secrets(block.numbered()),
+                "code": redact_secrets(block.review_view()),
             }
             for block in blocks
         ],

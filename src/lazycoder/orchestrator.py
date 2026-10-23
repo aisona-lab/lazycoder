@@ -59,7 +59,14 @@ def review_diff(
     reviewer: SingleRuleReviewer, diff_text: str, rubric: ReviewRulesConfig
 ) -> ReviewReport:
     """Review every hunk of a diff against the full rubric, one global report."""
-    reports = [reviewer.review_rubric(block, rubric) for block in parse_diff(diff_text)]
+    return review_blocks(reviewer, parse_diff(diff_text), rubric)
+
+
+def review_blocks(
+    reviewer: SingleRuleReviewer, blocks: list[CodeBlock], rubric: ReviewRulesConfig
+) -> ReviewReport:
+    """Review prepared blocks (e.g. with file context attached), one report."""
+    reports = [reviewer.review_rubric(block, rubric) for block in blocks]
     if not reports:
         return ReviewReport(findings=[], rule_results=[], rule_errors=[])
     return ReviewReport.merge(reports)
