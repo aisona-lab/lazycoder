@@ -1,0 +1,110 @@
+lazycoder Stage 3a — corpus run 3, agent mode WITH file context
+date: 2026-10-23
+corpus: corpus/seed.jsonl (22 clean / 15 defective hunks from 8 fix PRs)
+context: corpus/seed.context.jsonl (±120 lines, CONTEXT_RADIUS)
+preset: full (17 rules) — 629 answers, same 5-hunk shards and hunk order as run 2
+reviewer: 8 fresh Claude Code subagents, run-2 prompt verbatim
+protocol and decision rule: pre-registered in c36da29 (docs/hardening-plan.md)
+  before this run; the first launch died on a usage limit before any answer
+  was written, and the 8 shards were relaunched unchanged.
+
+                        run 2 (hunk)   run 3 (context)
+  quiet rate             86%            91%
+  noise per clean hunk   0.14           0.14
+  hunk recall (gated)    3/15           5/15
+  rule recall            0/15           1/15
+  R13 abstention         41%            11%
+  R14 abstention         78%            62%
+  gate ready             no             no
+
+PRE-REGISTERED VERDICT: INCONCLUSIVE (hunk recall 4-5/15). Context stays
+opt-in; the corpus must grow before deciding. Not adopted as the skill default.
+
+Read by hand (observation, not a metric): labelled defects described
+correctly, under any rule —
+  - urllib3-5255-old-0 (NEW with context): "load_pem_private_key raises
+    TypeError when a password is given but the key is unencrypted; the old
+    path ignored the unused password" — the labelled defect, and R4 (the
+    label's rule) fired: the first rule-recall hit in three runs.
+  - requests-7308-old-0 / -old-1: the `$` trailing-newline header regex, and
+    the missing trailing-newline test case for it.
+  - httpx-3442-old-0: verify=False returns early, cert never loaded.
+  - urllib3-5029-old-1: flagged (R8, duplicate parametrize case), but not the
+    labelled defect — counted by hunk recall, a known weakness of the metric.
+  So 3 of the 8 labelled fix PRs were described correctly (run 2: 2 of 8).
+
+Clean-hunk findings worth a second look (labels are provisional):
+  - click-3876-3 R4: format_arguments passes get_help_record() results to
+    write_dl without filtering None, unlike format_options. Flagged in runs 2
+    and 3 (insufficient_context in run 1). Still unverified.
+
+Caveats: soft isolation (instruction, not sandbox); n=15 defective hunks;
+the reviewer is an agent, not the API path; canaries are not used in corpus
+mode.
+
+clean     requests-7505-0               NOISE R12,R8
+clean     httpx-3773-0                  quiet
+clean     click-3876-3                  NOISE R4
+clean     urllib3-5277-1                quiet
+clean     requests-7505-1               quiet
+clean     httpx-3699-1                  quiet
+clean     click-3876-4                  quiet
+clean     urllib3-5276-0                quiet
+clean     requests-7498-0               quiet
+clean     httpx-3699-2                  quiet
+clean     click-3866-3                  quiet
+clean     urllib3-5276-1                quiet
+clean     requests-7497-1               quiet
+clean     httpx-3690-0                  quiet
+clean     click-3866-4                  quiet
+clean     urllib3-5274-1                quiet
+clean     requests-7497-2               quiet
+clean     httpx-3690-1                  quiet
+clean     click-3861-1                  quiet
+clean     urllib3-5269-3                quiet
+clean     requests-7496-1               quiet
+clean     httpx-3673-0                  quiet
+defective urllib3-5029-old-0            caught -  MISSED R7
+defective urllib3-5029-old-1            caught -  MISSED R7  unlabelled R8
+defective urllib3-5255-old-0            caught R4  unlabelled R13,R16
+defective urllib3-5255-old-1            caught -  MISSED R4
+defective urllib3-5260-old-0            caught -  MISSED R4
+defective urllib3-5260-old-1            caught -  MISSED R4
+defective requests-7308-old-0           caught -  MISSED R4  unlabelled R13,R7
+defective requests-7308-old-1           caught -  MISSED R4  unlabelled R14
+defective httpx-3442-old-0              caught -  MISSED R7  unlabelled R13,R2
+defective requests-7310-old-0           caught -  MISSED R7
+defective requests-7310-old-1           caught -  MISSED R7
+defective httpx-3380-old-0              caught -  MISSED R3
+defective httpx-3380-old-1              caught -  MISSED R3
+defective urllib3-5271-old-0            caught -  MISSED R4
+defective urllib3-5271-old-1            caught -  MISSED R4
+
+quiet rate  91%  (20/22 clean hunks drew no comment)
+noise       0.14 findings per clean hunk
+hunk recall 33%  (5/15 defective hunks drew a finding; gated)
+rule recall 7%  (1 caught, 14 missed; the labelled rule itself fired)
+
+rule    noise%  caught  missed  abstain          cull
+R1         0%       0       0      0%          keep
+R2         0%       0       0      0%          keep
+R3         0%       0       2      0%          keep
+R4         5%       1       7      0%          keep
+R5         0%       0       0      0%          keep
+R6         0%       0       0      0%          keep
+R7         0%       0       5      0%          keep
+R8         5%       0       0      3%          keep
+R9         0%       0       0      0%          keep
+R10        0%       0       0      0%          keep
+R11        0%       0       0      0%          keep
+R12        5%       0       0      3%          keep
+R13        0%       0       0     11%          keep
+R14        0%       0       0     62% keep_stage_3a
+R15        0%       0       0      0%          keep
+R16        0%       0       0      3%          keep
+R17        0%       0       0      0%          keep
+
+fail-on gate ready: False  (hunk recall 33% < 50%)
+Action fail-on stays never — metrics do not justify a blocking gate.
+
+measured: agent:claude-code-subagents-run3-context, preset full. This scores that agent as a reviewer, not the API path.

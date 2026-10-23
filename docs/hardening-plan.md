@@ -176,6 +176,43 @@ Feed the whole post-change file with the diff marked inside it. `file` and
 almost all of the context win lives, and it drops cost as a side effect: a
 40-hunk PR is ~8 files, so 680 calls become ~136.
 
+**Built (2026-10-23):** `--context` on review / packet / check. Each hunk is
+shown inside a window of its post-change file, **120 lines each side**
+(`CONTEXT_RADIUS`; the unit is not the whole file because some corpus files
+run to ~3,800 lines), hunk lines marked `*`, and only those citable. The
+corpus windows are in `corpus/seed.context.jsonl` (built from the merge
+commit for clean hunks and its first parent for defective ones, each checked
+to hold its hunk verbatim). Not done: the per-file batching that would cut
+the call count; each hunk is still asked separately.
+
+### Pre-registered: corpus run 3 (context), fixed before it runs
+
+Protocol identical to run 2 except the context: same 37 hunks, `full`
+preset, 8 shards of 5 hunks, one fresh Claude Code subagent per shard, the
+run-2 prompt (no "only fail when the code shows it" sentence), soft
+isolation by instruction. Scored with the current gate: quiet rate ≥ 80%,
+hunk recall ≥ 50%, no high rule > 5% clean noise.
+
+Decision rule for whether context earns its cost:
+- **Adopt** (make `--context .` the skill's default) if hunk recall reaches
+  **≥ 6/15** (double run 2's 3/15) **and** quiet rate stays **≥ 80%**.
+- **Inconclusive** if hunk recall is 4–5/15: 15 hunks cannot separate that
+  from noise; grow the corpus before deciding.
+- **Reject** (keep context opt-in, look elsewhere) if hunk recall ≤ 3/15 or
+  quiet rate falls below 80%.
+
+Abstention on R13 / R14 is reported against run 2 (41% / 78%) as a
+secondary read, not a criterion.
+
+**Run 3 result
+([`docs/eval-runs/2026-10-23-agent-mode-corpus-run3-context.txt`](eval-runs/2026-10-23-agent-mode-corpus-run3-context.txt)):
+hunk recall 5/15, quiet rate 91% → INCONCLUSIVE** by the rule above.
+Context stays opt-in; the next step is a larger corpus, not a decision. The
+secondary read moved the way the stage predicted: R13 abstention 41% → 11%,
+R14 78% → 62%, with noise flat (0.14 per clean hunk). By hand, 3 of 8
+labelled fixes were described (run 2: 2), including the first labelled-rule
+hit in three runs (urllib3-5255, R4).
+
 ## Stage 3b — repo context (deferred)
 
 Caller retrieval via ripgrep, plus project conventions from `CLAUDE.md` /

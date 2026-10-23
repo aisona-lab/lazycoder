@@ -7,6 +7,7 @@ Labelled real hunks for precision / quiet-rate measurement. See
 |------|------|
 | `seed.jsonl` | Labelled seed (≥20 clean, ≥15 defective). Checked into git. |
 | `candidates.jsonl` | Unlabelled harvest output — local only, not committed. |
+| `seed.context.jsonl` | Stage 3a: each hunk's file window (±120 lines), from the merge commit (clean) or its parent (defective). Rebuild: `corpus_cli.py context corpus/seed.jsonl`. Its `rev` field reveals the label, so like `seed.jsonl` it must never reach the answering agent; the packet carries only file, line and code. |
 
 ## Labels
 
