@@ -252,9 +252,9 @@ def prove(path: Path, out: Path | None) -> int:
         f"  stage3a if abstention > {STAGE3A_ABSTENTION_RATE:.0%}"
         f" and clean_noise < {STAGE3A_MAX_NOISE_RATE:.0%}",
         f"  fail-on ready if quiet_rate ≥ {FAIL_ON_MIN_QUIET_RATE:.0%},"
-        f" recall ≥ {FAIL_ON_MIN_RECALL:.0%}"
+        f" hunk recall ≥ {FAIL_ON_MIN_RECALL:.0%}"
         f" and no high rule > {FAIL_ON_MAX_HIGH_NOISE_RATE:.0%} clean noise"
-        " (recall floor amended 2026-10-23)",
+        " (recall floor amended 2026-10-23, hunk-level before Stage 3a)",
         f"  shape: ≥{MIN_CLEAN_HUNKS} clean, ≥{MIN_DEFECTIVE_HUNKS} defective",
         "",
     ]

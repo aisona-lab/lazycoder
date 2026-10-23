@@ -333,6 +333,7 @@ def test_cli_corpus_scores_an_oracle_agent(
     assert code == 0
     assert "quiet rate  100%" in out
     # Only R7 defects are in scope for focused; R3/R4 ones are not "missed".
-    assert "recall      100%  (5 caught, 0 missed)" in out
+    assert "rule recall 100%  (5 caught, 0 missed" in out
+    assert "hunk recall 100%  (5/5 defective hunks" in out
     assert "fail-on gate ready:" in out
     assert "agent:oracle, preset focused" in out

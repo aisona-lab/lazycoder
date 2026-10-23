@@ -157,6 +157,18 @@ the API reviewer (recall 0.92); agent mode makes a silent reviewer cheap to
 run, and silence must not be able to flip `fail-on`. The cull table is
 unchanged: the floor applies to the gate only.
 
+**Amendment 2, 2026-10-23 — after runs 1–2, before Stage 3a.** The recall the
+gate reads becomes **hunk recall**: the share of in-scope defective hunks that
+draw at least one finding, under any rule. Reason: in run 2 the reviewer
+described two labelled defects correctly under rules other than the label
+(R4 / R7 / R12 / R13 overlap), so rule recall measures which name it picked
+as much as whether it saw. This is decided after looking at runs 1–2, and it
+changes neither outcome (hunk recall 1/15 and 3/15, both under 50%). It is
+fixed now so Stage 3a is scored against it, not fitted to it. Known
+weakness: a finding about a different problem in the same hunk still counts
+(1 of 3 in run 2); `unlabelled` is printed so a human can check. Rule recall
+stays in the output, ungated.
+
 ## Stage 3a — the file is the unit (~1 day)
 
 Feed the whole post-change file with the diff marked inside it. `file` and
