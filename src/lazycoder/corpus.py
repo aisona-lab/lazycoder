@@ -21,7 +21,7 @@ from pathlib import Path
 from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from lazycoder.config.models import ReviewRulesConfig
-from lazycoder.domain import CodeBlock, RuleId, Severity, Verdict
+from lazycoder.domain import CodeBlock, ReviewReport, RuleId, Severity, Verdict
 from lazycoder.reviewers import SingleRuleReviewer
 
 
@@ -148,11 +148,22 @@ class HunkResult:
 def score_hunk(
     reviewer: SingleRuleReviewer, hunk: CorpusHunk, rubric: ReviewRulesConfig
 ) -> HunkResult:
-    report = reviewer.review_rubric(hunk.block(), rubric)
+    return score_report(hunk, reviewer.review_rubric(hunk.block(), rubric), rubric)
+
+
+def score_report(
+    hunk: CorpusHunk, report: ReviewReport, rubric: ReviewRulesConfig
+) -> HunkResult:
+    """Score one hunk's report, wherever it came from (API or agent mode).
+
+    A labelled defect only counts against rules the rubric (or preset) asks:
+    a preset that drops R4 cannot miss an R4 defect, it never looked.
+    """
+    in_scope = {rule.id for rule in rubric.rules}
     return HunkResult(
         hunk_id=hunk.id,
         label=hunk.label,
-        expected=frozenset(hunk.expect_rules),
+        expected=frozenset(r for r in hunk.expect_rules if r in in_scope),
         fired=frozenset(f.rule_id for f in report.findings),
         abstained=frozenset(r.rule_id for r in report.abstentions),
         verdict=report.verdict,
@@ -376,3 +387,52 @@ def cull_plan(
         rule.id: decide_cull(summary.per_rule[rule.id], rule.severity_if_unjustified)
         for rule in rubric.rules
     }
+
+
+def _ids(rules: frozenset[RuleId]) -> str:
+    return ",".join(sorted(rule.value for rule in rules))
+
+
+def format_result_line(result: HunkResult) -> str:
+    parts = [f"{result.label.value:9} {result.hunk_id:28}"]
+    if result.label is Label.CLEAN:
+        parts.append("quiet" if result.is_quiet else "NOISE " + _ids(result.noise))
+    else:
+        parts.append("caught " + (_ids(result.caught) or "-"))
+        if result.missed:
+            parts.append("MISSED " + _ids(result.missed))
+        if result.unlabelled:
+            parts.append("unlabelled " + _ids(result.unlabelled))
+    if result.errored:
+        parts.append("errors " + _ids(result.errored))
+    return "  ".join(parts)
+
+
+def format_corpus_summary(
+    summary: CorpusReport, rubric: ReviewRulesConfig
+) -> list[str]:
+    """Headline numbers, per-rule cull decision and the fail-on gate."""
+    lines = [
+        f"\nquiet rate  {summary.quiet_rate:.0%}"
+        f"  ({summary.quiet_clean_hunks}/{summary.clean_hunks} clean hunks"
+        " drew no comment)",
+        f"noise       {summary.noise_per_clean_hunk:.2f} findings per clean hunk",
+        f"recall      {summary.recall:.0%}"
+        f"  ({summary.caught} caught, {summary.missed} missed)",
+        f"\n{'rule':6}{'noise%':>8}{'caught':>8}{'missed':>8}{'abstain':>9}{'cull':>14}",
+    ]
+    plan = cull_plan(summary, rubric)
+    for rule_id, verdict in summary.per_rule.items():
+        lines.append(
+            f"{rule_id.value:6}{verdict.clean_noise_rate:>7.0%}"
+            f"{verdict.caught:>8}{verdict.missed:>8}"
+            f"{verdict.abstention_rate:>8.0%}"
+            f"{plan[rule_id].value:>14}"
+        )
+    gate = fail_on_gate(summary, rubric)
+    lines.append(f"\nfail-on gate ready: {gate.ready}  ({gate.reason})")
+    if not gate.ready:
+        lines.append(
+            "Action fail-on stays never — metrics do not justify a blocking gate."
+        )
+    return lines

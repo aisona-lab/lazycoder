@@ -58,6 +58,14 @@ pre-registered thresholds; `scripts/corpus_cli.py prove` is the offline
 proof. Live `run` + rule cull from real scores remain gated on Anthropic
 credits — do not invent precision numbers and do not flip `fail-on`.
 
+**Keyless path (agent mode):** `lazycoder packet --corpus` / `check --corpus`
+scores the corpus with the user's own coding agent as the reviewer, through
+the same `report` / `cull_plan` / `fail_on_gate`. The number it produces is
+labelled with that agent and measures it, not the API path; the answering
+agent must not be able to read `seed.jsonl`. Note before reading results:
+8 of the 15 labelled defects are R4 and the `focused` preset does not ask R4,
+so `focused` cannot catch most of this corpus by construction.
+
 
 Corpus of 30–50 hunks from merged OSS PRs: half with a defect the follow-up fix
 confirms, half genuinely clean. Not toy snippets.

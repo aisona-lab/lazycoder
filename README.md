@@ -73,16 +73,43 @@ Answers written for another diff or preset are refused (exit 3) — block ids ar
 content hashes. The decision log records `model: agent:<name>` and replays like
 any other run.
 
-What it cannot do: verify that the agent actually thought about each pair. A
-model that answers `pass` to everything gets APPROVE on clean-looking code, and
-an agent reviewing its own change is the weakest reviewer there is. The skill
-tells it to review from a fresh subagent; measure yours before trusting it:
+**Canaries.** `check` cannot see whether the agent thought about a pair, but it
+can see whether the agent flags a defect the harness already knows is there.
+`packet` mixes one known-defect block from `fixtures/deny/` in among the real
+hunks (`--canaries N`, `0` to disable), with its place and name derived from a
+hash of the diff, so `check` plants the same one without any state passing
+through the agent. A missed canary is an evaluation error: the run can never
+APPROVE, the output says `canaries: 0/1 caught`, and the decision log records
+it. Canary findings never reach the report. This catches an agent that
+rubber-stamps; it does not stop one that goes looking for the canary (the pool
+is six Python snippets), and it does not make self-review independent. The
+skill still tells the agent to review from a fresh subagent.
+
+Measure your agent before trusting it:
 
 ```bash
 lazycoder packet --evals --preset focused --out evals-packet.json
 # ...agent answers it...
 lazycoder check --evals --answers evals-answers.json --preset focused   # precision / recall / abstention per rule
 ```
+
+### Scoring the corpus with your agent
+
+The Stage 2 number no longer waits on API credits:
+
+```bash
+lazycoder packet --corpus corpus/seed.jsonl --out /tmp/corpus-packet.json
+# ...an agent with NO access to this repo answers it into /tmp/corpus-answers.json...
+lazycoder check --corpus corpus/seed.jsonl --answers /tmp/corpus-answers.json --agent claude-code
+```
+
+The packet carries file, line and code only: no ids, labels or PR links. The
+labels still sit in `corpus/seed.jsonl`, so an agent that can read the repo can
+cheat; answer from a copy of the packet outside it. `check --corpus` prints the
+same quiet rate, per-rule cull decision and fail-on gate as `corpus_cli.py run`,
+labelled with the agent that answered: it measures that agent as a reviewer,
+not the API path. Under a preset, labelled defects of rules the preset does not
+ask are out of scope, not misses.
 
 ### Presets
 
@@ -399,9 +426,10 @@ pytest -m integration
 8. **A real corpus** — labelled seed in `corpus/seed.jsonl` (22 clean / 15
    defective from merged OSS PRs) meets the Stage 2 shape floor. Cull
    thresholds are executable (`decide_cull` / `fail_on_gate`); offline proof:
-   `python scripts/corpus_cli.py prove corpus/seed.jsonl`. **Live** scoring
-   (`corpus_cli.py run`) still needs Anthropic credits; Action `fail-on`
-   stays `never` until the fail-on gate is ready.
+   `python scripts/corpus_cli.py prove corpus/seed.jsonl`. Live scoring runs
+   on the API (`corpus_cli.py run`, needs credits) or keyless through your
+   own agent (`lazycoder check --corpus`). Action `fail-on` stays `never`
+   until the fail-on gate is ready.
 9. **File-level context** — review the whole post-change file with the diff
    marked inside it, so the system-level rules (state, compatibility,
    concurrency) become answerable instead of abstaining. Cheaper too: a 40-hunk
