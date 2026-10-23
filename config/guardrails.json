@@ -35,7 +35,6 @@
     "escalate_if": ["any high-severity security finding", "the agent reports low confidence", "review scope exceeds limits"]
   },
   "limits": {
-    "max_steps_per_review": 25,
     "max_files_per_run": 50,
     "max_tokens_budget": 200000
   }

@@ -51,6 +51,7 @@ from a second embedded copy.
 |---------|------------|-------|
 | Review diff → exit code 0/1/2 | `test_cli.py` | Fake client |
 | Refuse APPROVE on empty diff | `test_cli.py` | Exit 3 |
+| `guardrails.json` limits: files per run (all paths), API token budget (estimated from the real prompts) | `test_limits.py` | Exit 4 before any client or key; `--allow-large` is the human OK; Action: SKIPPED under `fail-on: never` |
 | `--log` writes one record | `test_decision_log.py` | |
 | `lazycoder replay LOG` | `test_cli.py` | No Anthropic client constructed |
 | `--preset` (rule subset; severities untouched) | `test_presets.py`, `test_agent_mode.py` | `config/presets.json`; optional file, falls back to `full` |

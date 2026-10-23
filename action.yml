@@ -40,7 +40,7 @@ outputs:
     description: APPROVE | REQUEST_CHANGES | BLOCK | ERROR | SKIPPED
     value: ${{ steps.review.outputs.verdict }}
   exit-code:
-    description: Raw lazycoder exit code (0/1/2/3)
+    description: Raw lazycoder exit code (0/1/2/3; 4 = PR exceeds review limits)
     value: ${{ steps.review.outputs.exit_code }}
 
 runs:
@@ -93,6 +93,15 @@ runs:
           echo "::warning::lazycoder soft-skipped — Anthropic auth/billing error (fail-on=never); not failing the check"
           echo "verdict=SKIPPED" >> "$GITHUB_OUTPUT"
           echo "lazycoder verdict: SKIPPED (exit $code, soft-skip)"
+          exit 0
+        fi
+        # Exit 4: the PR exceeds guardrails.json limits and nothing was
+        # reviewed. Advisory runs skip with a warning; a gating run fails,
+        # because an unreviewed PR must not pass a gate silently.
+        if [ "$code" -eq 4 ] && [ "${{ inputs.fail-on }}" = "never" ]; then
+          echo "::warning::lazycoder skipped — PR exceeds review limits: $(cat "$RUNNER_TEMP/stderr.txt")"
+          echo "verdict=SKIPPED" >> "$GITHUB_OUTPUT"
+          echo "lazycoder verdict: SKIPPED (exit 4, scope)"
           exit 0
         fi
         case $code in

@@ -69,7 +69,7 @@ class SingleRuleReviewer:
         self._client = client
 
     def review(self, block: CodeBlock, rule: ReviewRule) -> RuleResult:
-        prompt = self._build_prompt(block=block, rule=rule)
+        prompt = self.build_prompt(block, rule)
         return self.judge(self._client.generate(prompt), block=block, rule=rule)
 
     @classmethod
@@ -146,7 +146,8 @@ class SingleRuleReviewer:
         """Evaluate one block against every rule in the configured rubric."""
         return self.review_all(block, rubric.rules)
 
-    def _build_prompt(self, block: CodeBlock, rule: ReviewRule) -> str:
+    @staticmethod
+    def build_prompt(block: CodeBlock, rule: ReviewRule) -> str:
         # Every line is prefixed with its real post-change number, so the model
         # cites a line that exists instead of inventing one, and injected text
         # cannot forge the numbering the harness itself writes.
