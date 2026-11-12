@@ -5,14 +5,18 @@ on:
     # Semver tags only — the moving Action tag (v1) must not trigger a publish.
     tags: ["v[0-9]*.[0-9]*.[0-9]*"]
 
+permissions:
+  contents: read
+
 jobs:
   pypi:
     runs-on: ubuntu-latest
     permissions:
+      contents: read
       id-token: write # OIDC for PyPI trusted publishing
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@68559e99cc807c1eb7e9238fd43a15bba460eec2 # v10.3.3
       - name: Gate — deterministic suite must be green
         run: |
           uv sync --extra dev
