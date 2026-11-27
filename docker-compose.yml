@@ -1,0 +1,78 @@
+services:
+  review:
+    build: .
+    image: lazycoder:0.3.0
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      LAZYCODER_MODEL: ${LAZYCODER_MODEL:-}
+      LAZYCODER_MAX_TOKENS: ${LAZYCODER_MAX_TOKENS:-}
+    volumes:
+      - .:/workspace:ro
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  packet:
+    build: .
+    image: lazycoder:0.3.0
+    volumes:
+      - .:/workspace
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["packet", "--help"]
+
+  check:
+    build: .
+    image: lazycoder:0.3.0
+    volumes:
+      - .:/workspace
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["check", "--help"]
+
+  replay:
+    build: .
+    image: lazycoder:0.3.0
+    volumes:
+      - .:/workspace:ro
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    command: ["replay", "--help"]
+
+  prove:
+    build: .
+    image: lazycoder:0.3.0
+    entrypoint:
+      - python
+      - /opt/lazycoder/scripts/corpus_cli.py
+      - prove
+      - /opt/lazycoder/corpus/seed.jsonl
+      - --no-artifact
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+  bench:
+    build: .
+    image: lazycoder:0.3.0
+    entrypoint:
+      - python
+      - /opt/lazycoder/scripts/bench_harness.py
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true

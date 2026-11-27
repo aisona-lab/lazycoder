@@ -6,7 +6,8 @@ block against a fixed rubric and returns a defensible verdict —
 
 Code gets written fast. The bottleneck is trusting it. lazycoder is the reviewer
 that never gets tired, never skips a rule, and refuses to say APPROVE unless
-every rule has a recorded pass/fail.
+every rule has a recorded pass/fail. See [ARCHITECTURE.md](ARCHITECTURE.md) for
+the harness design and [CHANGELOG.md](CHANGELOG.md) for release notes (`v0.3.0`).
 
 ## Sibling: agent-action-gate
 
@@ -35,6 +36,25 @@ uvx lazycoder my.diff              # zero-install run (needs key)
 pipx install lazycoder             # or install the CLI permanently
 
 git diff main | uvx lazycoder -    # review your branch straight from a pipe
+```
+
+### Docker (1-step distribution)
+
+Non-root multi-stage image (`Dockerfile`, `docker-compose.yml`) supporting both
+zero-key offline commands and optional live review:
+
+```bash
+docker build -t lazycoder:0.3.0 .
+
+# Zero-key offline harness commands
+docker compose run --rm prove                                  # Stage 2 corpus proof
+docker compose run --rm bench                                  # harness latency & cost model
+docker compose run --rm replay runs.jsonl                      # replay --log verdicts
+docker compose run --rm packet my.diff --preset focused --out packet.json
+docker compose run --rm check my.diff --answers answers.json --preset focused
+
+# Optional live API review
+ANTHROPIC_API_KEY=sk-ant-... docker compose run --rm review my.diff
 ```
 
 Exit codes map the verdict — `0` APPROVE, `1` REQUEST_CHANGES, `2` BLOCK — so it
@@ -237,7 +257,50 @@ being evaluated, `severity` from `review_rules.json`. The model supplies the
 line and the reason — and a line outside the reviewed hunk is rejected as a
 failed evaluation, never recorded as a finding.
 
-## Measured
+## Benchmarks & Evals
+
+### Deterministic harness latency (offline)
+
+Measured locally with zero API calls (`uv run python scripts/bench_harness.py`,
+200 iterations, 20 warmup):
+
+| Stage | p50 (ms) | p95 (ms) |
+|---|---:|---:|
+| `parse_diff` (4 files, 4 hunks) | 0.0131 | 0.0134 |
+| `redact_secrets` (41 blocks) | 0.9768 | 1.0072 |
+| `packet` + canaries (`focused`, 5 rules) | 0.0994 | 0.1111 |
+| `packet` + canaries (`full`, 17 rules) | 0.1335 | 0.1427 |
+| `check` + canaries (`focused`, 25 pairs) | 0.2522 | 0.2690 |
+| `check` + canaries (`full`, 85 pairs) | 0.7672 | 0.7966 |
+| `derive_verdict` (68 results) | 0.0047 | 0.0050 |
+| `replay_log` (10 JSONL records, `full`) | 1.3244 | 1.3589 |
+
+### Cost model per 1,000 hunks
+
+Derived by `scripts/bench_harness.py` using `lazycoder.limits.measure()`
+(`CHARS_PER_TOKEN = 4` plus `SYSTEM_PROMPT` + `SUBMIT_REVIEW_TOOL` per-call
+overhead) on the 37 OSS hunks in `corpus/seed.jsonl` and 13 cases in `fixtures/`.
+Live API USD estimates use an illustrative reference rate card (`$15.00/1M` input
+tokens, `$75.00/1M` output tokens, `40` output tokens per `submit_review` call):
+
+| Dataset | Preset (rules) | Avg in tok/hunk | Calls / 1k hunks | In tok / 1k hunks | Offline / Agent | Live API (est.) |
+|---|---|---:|---:|---:|---:|---:|
+| `corpus/seed.jsonl` (37 hunks) | `security` (1) | 784.4 | 1,000 | 784,351 | **$0.000** | $14.77 |
+| `corpus/seed.jsonl` (37 hunks) | `focused` (5) | 3,964.8 | 5,000 | 3,964,811 | **$0.000** | $74.47 |
+| `corpus/seed.jsonl` (37 hunks) | `full` (17) | 13,298.9 | 17,000 | 13,298,946 | **$0.000** | $250.48 |
+| `fixtures/evals` (13 hunks) | `security` (1) | 703.1 | 1,000 | 703,077 | **$0.000** | $13.55 |
+| `fixtures/evals` (13 hunks) | `focused` (5) | 3,558.6 | 5,000 | 3,558,615 | **$0.000** | $68.38 |
+| `fixtures/evals` (13 hunks) | `full` (17) | 11,918.0 | 17,000 | 11,918,000 | **$0.000** | $229.77 |
+
+Reproduce offline:
+
+```bash
+uv run python scripts/bench_harness.py
+uv run python scripts/corpus_cli.py prove corpus/seed.jsonl --no-artifact
+uv run pytest -q
+```
+
+### Measured review quality (Stage 1 & Stage 2)
 
 Two measurements, both bad, both published. Neither justifies a blocking gate,
 so the Action ships advisory (`fail-on: never`).
@@ -471,7 +534,7 @@ pytest -m integration
    opt-in integration suite (`pytest -m integration`). First live run: the model
    caught eval E3's SQL injection (R7 → BLOCK).~~ ✓
 5. ~~**Run the full evals.json set against the live model** and track precision,
-   recall and abstention.~~ ✓ Stage 1, see [Measured](#measured).
+   recall and abstention.~~ ✓ Stage 1, see [Benchmarks & Evals](#benchmarks--evals).
 6. ~~Distribution: published to [PyPI](https://pypi.org/project/lazycoder/) with
    a `lazycoder` console entry point (`uvx lazycoder my.diff`), rubric bundled
    in the wheel, releases via trusted publishing on `v*` tags.~~ ✓
@@ -483,7 +546,7 @@ pytest -m integration
    `python scripts/corpus_cli.py prove corpus/seed.jsonl`. Live scoring runs
    on the API (`corpus_cli.py run`, needs credits) or keyless through your
    own agent (`lazycoder check --corpus`). Two agent-mode runs are in
-   [Measured](#measured): quiet, but hunk recall 1–3 / 15. Action `fail-on`
+   [Benchmarks & Evals](#benchmarks--evals): quiet, but hunk recall 1–3 / 15. Action `fail-on`
    stays `never` until the fail-on gate is ready.
 9. **File-level context — next.** The corpus runs say most defects are not
    visible from the hunk alone. Review the whole post-change file with the diff
